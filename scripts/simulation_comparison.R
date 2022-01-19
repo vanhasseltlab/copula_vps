@@ -4,12 +4,22 @@ library(fitdistrplus)
 library(tidyverse)
 library(rvinecopulib)
 library(actuar)
+library(EnvStats)
 library(mvtnorm)
 library(kde1d)
 
 ##### - Data - #####
+# Load data
+pediatric_data_raw <- read.csv("data/GTV_final_roos_final2.csv", na.strings = ".", colClasses = "numeric")
+
 # Clean data
-age_no_crea <-data_t0 %>% group_by(age) %>% 
+data_t0 <- pediatric_data_raw %>% 
+  filter(TIME == 0) %>% 
+  select(-c(TIME, DV, MDV)) %>% 
+  mutate(AGED = round(AGEW*7)) %>% 
+  mutate(age = ifelse(AGED == 0, AGED, AGED - 1))
+
+age_no_crea <- data_t0 %>% group_by(age) %>% 
   summarize(crea_imputed = sum(CREA == 72)/n() == 1) %>% 
   ungroup() %>% 
   filter(crea_imputed) %>% unlist() %>% max()
@@ -70,14 +80,18 @@ estimate_spline_marginal <- function(covariate, xmin = NaN) {
   return(marg)
 }
 #estimate parametric distribution using kde1d package
-estimate_parametric_marginal <- function(covariate, distribution) {
-  param <- fitdist(covariate, distribution)
+estimate_parametric_marginal <- function(covariate, distribution, param = NULL) {
+  if (is.null(param)) {
+    param <- fitdist(covariate, distribution)
+  }
   marg <- list(pdf = function(u) {
     do.call(eval(paste0("q", distribution)), c(list(p = u), param$estimate))},
     pit = function(x) {
       do.call(eval(paste0("p", distribution)), c(list(q = x), param$estimate))}, 
     rdist = function(n) {
       do.call(eval(paste0("r", distribution)), c(list(n = n), param$estimate))},
+    density = function(x) {
+      do.call(eval(paste0("d", distribution)), c(list(x = x), param$estimate))},
     dist = param)
   
   return(marg)
@@ -105,11 +119,15 @@ seed_nr <- 794594
 # Statistics for observed distribution (truth)
 obs_results <- get_statistics(data_clean, columns = c("age", "BW", "CREA"))
 
-#### - Copulas - ####
+#### - Copulas I: parametric - ####
 # Fit distribution
-marg_crea <- estimate_spline_marginal(data_clean$CREA)
+param_crea_raw <- mixtools::normalmixEM(data_clean$CREA)
+param_crea <- list(estimate = c(mean1 = param_crea_raw$mu[1], sd1 = param_crea_raw$sigma[1], 
+                                mean2 = param_crea_raw$mu[2], sd2 = param_crea_raw$sigma[2], 
+                                p.mix = param_crea_raw$lambda[2]))
+marg_crea <- estimate_parametric_marginal(data_clean$CREA, "normMix", param = param_crea)
 marg_age <- estimate_parametric_marginal(data_clean$age, "nbinom")
-marg_BW <- estimate_spline_marginal(data_clean$BW)
+marg_BW <- estimate_parametric_marginal(data_clean$BW, "lnorm")
 
 data_unif <- data.frame(CREA = tranform_to_uniform(data_clean$CREA, marg_crea),
                         age = tranform_to_uniform(data_clean$age, marg_age),
@@ -128,12 +146,56 @@ sim_original <- data.frame(CREA = marg_crea$pdf(sim_unif$CREA),
                            type = "simulated", 
                            simulation_nr = rep(1:m, each = n_sim))
 # Get result statistics
-copula_results <- get_statistics_multiple_sims(sim_original, m, n_statistics, type = "copula")
+copula_I_results <- get_statistics_multiple_sims(sim_original, m, n_statistics, type = "copula_I")
 
-#### - Marginals - ####
+#### - Copulas II: non-parametric - ####
 # Fit distribution
 marg_crea <- estimate_spline_marginal(data_clean$CREA)
+marg_age <- estimate_spline_marginal(data_clean$age)
+marg_BW <- estimate_spline_marginal(data_clean$BW)
+
+data_unif <- data.frame(CREA = tranform_to_uniform(data_clean$CREA, marg_crea),
+                        age = tranform_to_uniform(data_clean$age, marg_age),
+                        BW = tranform_to_uniform(data_clean$BW, marg_BW))
+
+vine_fit <- vinecop(data_unif, family_set = "all", var_types = c("c", "c", "c"))
+vine_distribution <- vinecop_dist(vine_fit$pair_copulas, vine_fit$structure, var_types =  c("c", "c", "c"))
+# Draw sample
+set.seed(seed_nr)
+sim_unif <- as.data.frame(rvinecop(n_sim*m, vine_distribution))
+names(sim_unif) <- names(data_unif)[1:3]
+sim_original <- data.frame(CREA = marg_crea$pdf(sim_unif$CREA),
+                           age = marg_age$pdf(sim_unif$age),
+                           BW = marg_BW$pdf(sim_unif$BW),
+                           type = "simulated", 
+                           simulation_nr = rep(1:m, each = n_sim))
+# Get result statistics
+copula_II_results <- get_statistics_multiple_sims(sim_original, m, n_statistics, type = "copula_II")
+
+
+#### - Marginals I: parametric - ####
+# Fit distribution
+param_crea_raw <- mixtools::normalmixEM(data_clean$CREA)
+param_crea <- list(estimate = c(mean1 = param_crea_raw$mu[1], sd1 = param_crea_raw$sigma[1], 
+                                mean2 = param_crea_raw$mu[2], sd2 = param_crea_raw$sigma[2], 
+                                p.mix = param_crea_raw$lambda[2]))
+marg_crea <- estimate_parametric_marginal(data_clean$CREA, "normMix", param = param_crea)
 marg_age <- estimate_parametric_marginal(data_clean$age, "nbinom")
+marg_BW <- estimate_parametric_marginal(data_clean$BW, "lnorm")
+# Draw sample
+set.seed(seed_nr)
+sim_marginal <- data.frame(CREA = marg_crea$rdist(n_sim*m),
+                           age = marg_age$rdist(n_sim*m),
+                           BW = marg_BW$rdist(n_sim*m),
+                           type = "simulated", 
+                           simulation_nr = rep(1:m, each = n_sim))
+# Get result statistics
+marginal_I_results <- get_statistics_multiple_sims(sim_marginal, m, n_statistics, type = "marginal_I")
+
+#### - Marginals II: splines - ####
+# Fit distribution
+marg_crea <- estimate_spline_marginal(data_clean$CREA)
+marg_age <- estimate_spline_marginal(data_clean$age)
 marg_BW <- estimate_spline_marginal(data_clean$BW)
 # Draw sample
 set.seed(seed_nr)
@@ -143,7 +205,7 @@ sim_marginal <- data.frame(CREA = marg_crea$rdist(n_sim*m),
                            type = "simulated", 
                            simulation_nr = rep(1:m, each = n_sim))
 # Get result statistics
-marginal_results <- get_statistics_multiple_sims(sim_marginal, m, n_statistics, type = "marginal")
+marginal_II_results <- get_statistics_multiple_sims(sim_marginal, m, n_statistics, type = "marginal_II")
 
 #### - Multivariate Normal Distribution - ####
 # Fit distribution
@@ -169,7 +231,7 @@ mvnorm_results <- get_statistics_multiple_sims(sim_mvnorm, m, n_statistics, type
 
 #### - Conditional Distribution - ####
 # Import MICE simulation function simCovMICE
-source("scripts/Smania_Jonsson_MICE_simulation.R")
+source("scripts/functions/Smania_Jonsson_MICE_simulation.R")
 # Draw sample
 set.seed(seed_nr)
 sim_cd <- simCovMICE(m = m, data_clean, catCovs = NULL)
@@ -178,8 +240,10 @@ names(sim_cd)[names(sim_cd) == "NSIM"] <- "simulation_nr"
 cd_results <- get_statistics_multiple_sims(sim_cd, m, n_statistics, type = "conditional distribution")
 
 ##### - Plot Results - #####
-results_plot <- copula_results %>% 
-  bind_rows(marginal_results) %>% 
+results_plot <- copula_I_results %>% 
+  bind_rows(copula_II_results) %>% 
+  bind_rows(marginal_I_results) %>% 
+  bind_rows(marginal_II_results) %>% 
   bind_rows(mvnorm_results) %>% 
   bind_rows(cd_results) %>% 
   filter(statistic %in% c("mean", "median", "sd") | covariate == "all") %>% 
@@ -193,6 +257,6 @@ results_plot <- copula_results %>%
   scale_linetype_manual(values = 2, name = NULL) +
   theme_bw()
 
-pdf("results/figures/simulation_statitsics.pdf", height = 7, width = 10)
+pdf("results/figures/simulation_statistics.pdf", height = 7, width = 10)
 print(results_plot)
 dev.off()
