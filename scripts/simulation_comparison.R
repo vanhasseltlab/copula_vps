@@ -24,7 +24,7 @@ age_no_crea <- data_t0 %>% group_by(age) %>%
   ungroup() %>% 
   filter(crea_imputed) %>% unlist() %>% max()
 
-data_clean <- data_t0 %>% 
+data_total <- data_t0 %>% 
   filter(!ID %in% c(2004, 2175, 2141)) %>% 
   filter(GRP %in% c(1, 2)) %>%
   filter(age > age_no_crea) %>%
@@ -37,12 +37,38 @@ source("scripts/functions/Smania_Jonsson_MICE_simulation.R")
 
 ##### - Simulations - #####
 # Simulation settings
-n_sim <- nrow(data_clean)
+#set type of simulation study: "full_data", "random_split" or "range_split" set range for range split
+simulation_type <- "range_split"
+range <- c(median(data_total$age) + 1, max(data_total$age))
+range_variable <- "age"
+
+
+if (simulation_type == "full_data") {
+  data_clean <- data_total
+  data_test <- data_total
+} else {
+  if (simulation_type == "random_split") {
+    set.seed(7910462)
+    ind_train <- sample(1:nrow(data_total), round(nrow(data_total)/2), replace = F)
+    }
+  if (simulation_type == "range_split") {
+    ind_train <- which(data_total[, range_variable] >= range[1] & data_total[, range_variable] <= range[2])
+    simulation_type <- paste(simulation_type, range_variable,  range[1],  range[2], sep = "_")
+    }
+  data_clean <- data_total[ind_train, ]
+  data_test <- data_total[-ind_train, ]
+}
+
+#other options
+n_sim <- nrow(data_test)
 m <- 30
 n_statistics <- ncol(data_clean)*5  + choose(ncol(data_clean), 2)
 seed_nr <- 794594
+
+
+
 # Statistics for observed distribution (truth)
-obs_results <- get_statistics(data_clean, columns = c("age", "BW", "CREA"))
+obs_results <- get_statistics(data_test, columns = c("age", "BW", "CREA"))
 
 #### - Copulas I: parametric - ####
 # Fit distribution
@@ -70,6 +96,13 @@ sim_original <- data.frame(CREA = marg_crea$pdf(sim_unif$CREA),
                            BW = marg_BW$pdf(sim_unif$BW),
                            type = "simulated", 
                            simulation_nr = rep(1:m, each = n_sim))
+
+
+range_set <- sim_original[, range_variable] < range[1]
+sim_train <- sim_original[range_set, ]
+hist(sim_train$age, breaks = 30)
+range_results <- get_statistics_multiple_sims(sim_train, m, n_statistics, type = "copula_I")
+
 # Get result statistics
 copula_I_results <- get_statistics_multiple_sims(sim_original, m, n_statistics, type = "copula_I")
 
@@ -170,6 +203,8 @@ all_statistics <- copula_I_results %>%
   bind_rows(mvnorm_results) %>% 
   bind_rows(cd_results)
 
+write.csv(all_statistics, file = paste0("results/comparison/results_", simulation_type, ".csv"), row.names = F)
+
 results_plot <-  all_statistics %>% 
   filter(statistic %in% c("mean", "median", "sd") | covariate == "all") %>% 
   ggplot(aes(y = value, x = type, color = covariate)) +
@@ -182,7 +217,7 @@ results_plot <-  all_statistics %>%
   scale_linetype_manual(values = 2, name = NULL) +
   theme_bw()
 
-pdf("results/figures/simulation_statistics.pdf", height = 7, width = 10)
+pdf("results/figures/simulation_statistics", simulation_type,".pdf", height = 7, width = 10)
 print(results_plot)
 dev.off()
 
@@ -205,6 +240,6 @@ bias_variance_plot <- bias_variance %>%
   facet_wrap(statistic ~ covariate, nrow = 3, dir = "v") +
   theme_bw()
 
-pdf("results/figures/simulation_statistics_bias_var.pdf", height = 5, width = 8)
+pdf(paste0("results/figures/simulation_statistics_bias_var", simulation_type,".pdf"), height = 5, width = 8)
 print(bias_variance_plot)
 dev.off()
