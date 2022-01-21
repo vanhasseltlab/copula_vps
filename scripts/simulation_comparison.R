@@ -37,26 +37,19 @@ source("scripts/functions/Smania_Jonsson_MICE_simulation.R")
 
 ##### - Simulations - #####
 # Simulation settings
-#set type of simulation study: "full_data", "random_split" or "range_split" set range for range split
-simulation_type <- "range_split"
-range <- c(median(data_total$age) + 1, max(data_total$age))
-range_variable <- "age"
+#set type of simulation study: "full_data" or "random_split" 
+simulation_type <- "random_split"
 
 
 if (simulation_type == "full_data") {
   data_clean <- data_total
   data_test <- data_total
-} else {
-  if (simulation_type == "random_split") {
-    set.seed(7910462)
-    ind_train <- sample(1:nrow(data_total), round(nrow(data_total)/2), replace = F)
-    }
-  if (simulation_type == "range_split") {
-    ind_train <- which(data_total[, range_variable] >= range[1] & data_total[, range_variable] <= range[2])
-    simulation_type <- paste(simulation_type, range_variable,  range[1],  range[2], sep = "_")
-    }
+} else if (simulation_type == "random_split") {
+  set.seed(7910462)
+  ind_train <- sample(1:nrow(data_total), round(nrow(data_total)/2), replace = F)
+  ind_test <- -ind_train
   data_clean <- data_total[ind_train, ]
-  data_test <- data_total[-ind_train, ]
+  data_test <- data_total[ind_test, ]
 }
 
 #other options
@@ -91,20 +84,14 @@ vine_distribution <- vinecop_dist(vine_fit$pair_copulas, vine_fit$structure, var
 set.seed(seed_nr)
 sim_unif <- as.data.frame(rvinecop(n_sim*m, vine_distribution))
 names(sim_unif) <- names(data_unif)[1:3]
-sim_original <- data.frame(CREA = marg_crea$pdf(sim_unif$CREA),
+sim_copula_I <- data.frame(CREA = marg_crea$pdf(sim_unif$CREA),
                            age = marg_age$pdf(sim_unif$age),
                            BW = marg_BW$pdf(sim_unif$BW),
                            type = "simulated", 
                            simulation_nr = rep(1:m, each = n_sim))
 
-
-range_set <- sim_original[, range_variable] < range[1]
-sim_train <- sim_original[range_set, ]
-hist(sim_train$age, breaks = 30)
-range_results <- get_statistics_multiple_sims(sim_train, m, n_statistics, type = "copula_I")
-
 # Get result statistics
-copula_I_results <- get_statistics_multiple_sims(sim_original, m, n_statistics, type = "copula_I")
+copula_I_results <- get_statistics_multiple_sims(sim_copula_I, m, n_statistics, type = "copula_I")
 
 #### - Copulas II: non-parametric - ####
 # Fit distribution
@@ -122,13 +109,13 @@ vine_distribution <- vinecop_dist(vine_fit$pair_copulas, vine_fit$structure, var
 set.seed(seed_nr)
 sim_unif <- as.data.frame(rvinecop(n_sim*m, vine_distribution))
 names(sim_unif) <- names(data_unif)[1:3]
-sim_original <- data.frame(CREA = marg_crea$pdf(sim_unif$CREA),
+sim_copula_II <- data.frame(CREA = marg_crea$pdf(sim_unif$CREA),
                            age = marg_age$pdf(sim_unif$age),
                            BW = marg_BW$pdf(sim_unif$BW),
                            type = "simulated", 
                            simulation_nr = rep(1:m, each = n_sim))
 # Get result statistics
-copula_II_results <- get_statistics_multiple_sims(sim_original, m, n_statistics, type = "copula_II")
+copula_II_results <- get_statistics_multiple_sims(sim_copula_II, m, n_statistics, type = "copula_II")
 
 
 #### - Marginals I: parametric - ####
@@ -217,8 +204,27 @@ results_plot <-  all_statistics %>%
   scale_linetype_manual(values = 2, name = NULL) +
   theme_bw()
 
-pdf("results/figures/simulation_statistics", simulation_type,".pdf", height = 7, width = 10)
+results_plot_relative <-  all_statistics %>% 
+  filter(statistic %in% c("mean", "median", "sd") | covariate == "all") %>% 
+  left_join(obs_results %>% rename(observed = value)) %>% 
+  mutate(rel_value = (value - observed)/observed) %>% 
+  ggplot(aes(y = rel_value, x = type, color = covariate)) +
+  geom_hline(yintercept = c(-0.2, 0.2), linetype = 2, color = "grey65") +
+  geom_hline(yintercept = 0, linetype = 2, color = "black") +
+  geom_boxplot() +
+  
+  scale_x_discrete(guide = guide_axis(angle = 90)) +
+  facet_wrap(statistic ~ covariate , scales = "free_y", nrow = 3, dir = "v") +
+  theme_bw()
+
+pdf(paste0("results/figures/simulation_statistics_", simulation_type,".pdf"), height = 7, width = 10)
 print(results_plot)
+plot_comparison_distribution_sim_obs(sim_cd, data_test, sim_nr = 1, 
+                                     plot_type = "both", title = "Conditional Distributions")
+plot_comparison_distribution_sim_obs(sim_copula_I, data_test, sim_nr = 1, 
+                                     plot_type = "both", title = "Copula I")
+plot_comparison_distribution_sim_obs(sim_copula_II, data_test, sim_nr = 1, 
+                                     plot_type = "both", title = "Copula II")
 dev.off()
 
 bias_variance <- all_statistics %>% 
@@ -240,6 +246,6 @@ bias_variance_plot <- bias_variance %>%
   facet_wrap(statistic ~ covariate, nrow = 3, dir = "v") +
   theme_bw()
 
-pdf(paste0("results/figures/simulation_statistics_bias_var", simulation_type,".pdf"), height = 5, width = 8)
+pdf(paste0("results/figures/simulation_statistics_bias_var_", simulation_type,".pdf"), height = 5, width = 8)
 print(bias_variance_plot)
 dev.off()
