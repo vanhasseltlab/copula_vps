@@ -38,7 +38,7 @@ source("scripts/functions/Smania_Jonsson_MICE_simulation.R")
 ##### - Simulations - #####
 # Simulation settings
 #set type of simulation study: "full_data" or "random_split" 
-simulation_type <- "random_split"
+simulation_type <- "full_data"
 
 
 if (simulation_type == "full_data") {
@@ -219,6 +219,7 @@ results_plot_relative <-  all_statistics %>%
 
 pdf(paste0("results/figures/simulation_statistics_", simulation_type,".pdf"), height = 7, width = 10)
 print(results_plot)
+print(results_plot_relative)
 plot_comparison_distribution_sim_obs(sim_cd, data_test, sim_nr = 1, 
                                      plot_type = "both", title = "Conditional Distributions")
 plot_comparison_distribution_sim_obs(sim_copula_I, data_test, sim_nr = 1, 
