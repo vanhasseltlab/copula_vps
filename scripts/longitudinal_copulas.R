@@ -80,7 +80,7 @@ plot_Albumin <- data_reduced %>%
   geom_smooth(color = "red", se = F) +
   theme_bw()
 
-pdf("results/figures/Albumin_over_time.pdf")
+pdf("results/figures/Albumin_over_time.pdf", width = 5, height = 4)
 plot_Albumin_orig
 plot_Albumin
 dev.off()
@@ -177,8 +177,18 @@ data_reduced %>%
   facet_wrap(~ ID) +
   theme_bw()
 
+data_reduced %>% 
+  filter(ID %in% c(1:3, 5:13)) %>% 
+  ggplot(aes(x = gest, y = Albumin)) +
+  geom_point() +
+  geom_smooth(method = "lm", formula = y ~ x, se = F) +
+  facet_grid(ID ~ BABY, scales = "free_x") +
+  theme_bw()
 
-fixed_lm <- lm(data = data_reduced, Albumin ~ poly(gest, 2, raw = TRUE))
+library(splines)
+
+fixed_lm_poly <- lm(data = data_reduced, Albumin ~ poly(gest, 2, raw = TRUE))
+fixed_lm_bs <- lm(data = data_reduced, Albumin ~ bs(gest, knots = 1, degree = 3))
 
 fixed_lm_function <- function(x, lm_obj) {
   coefs <- coef(lm_obj)
@@ -187,7 +197,98 @@ fixed_lm_function <- function(x, lm_obj) {
 }
 
 with(data_reduced, plot(Albumin ~ gest))
-lines(fixed_lm_function(sort(unique(data_reduced$gest)), fixed_lm) ~ sort(unique(data_reduced$gest)), col = "red")
+lines(fixed_lm_function(sort(unique(data_reduced$gest)), fixed_lm_poly) ~ sort(unique(data_reduced$gest)), col = "red")
+
+plot(bs(data_reduced$gest, knots = 1, degree = 3))
+
+spline_gest <- bs(data_reduced$gest, knots = 1, degree = 3)
+coefs_bs <- coef(fixed_lm_bs)
+
+gest_x <- seq(2/7, 526/7, by = 1/7)
+with(data_reduced, plot(Albumin ~ gest))
+lines(gest_x, predict(fixed_lm_bs, data.frame(gest = gest_x)), col = "red")
+coefs_bs[1] + coefs_bs[2]*spline_gest[, 1]
+
+#try with baby
+
+fixed_lm <- lm(data = data_reduced, Albumin ~  gest*BABY + I(gest^2)*BABY +I(gest^3)*BABY )
+
+fixed_lm <- lm(data = data_reduced, Albumin ~  gest*BABY + I(gest^2):BABY)
+
+with(data_reduced, {
+  plot(Albumin ~ gest, pch = 1 + BABY)
+  points(gest, predict(fixed_lm, data_reduced[, c("gest", "BABY")]), col = "red", pch = 1 + BABY)
+})
+
+fixed_lm <- lm(data = data_reduced, log(Albumin) ~  gest*BABY + I(gest^2):BABY)
+
+with(data_reduced, {
+  plot(log(Albumin) ~ gest, pch = 1 + BABY)
+  points(gest, predict(fixed_lm, data_reduced[, c("gest", "BABY")]), col = "red", pch = 1 + BABY)
+})
+
+re_lm <- lmer(data = data_reduced,
+              Albumin ~  gest*BABY + I(gest^2)*BABY +I(gest^3)*BABY + (1 + gest*BABY + I(gest^2)*BABY +I(gest^3)*BABY|ID), REML = TRUE)
+
+sum_model <- summary(re_lm)
+individual_coefs <- coef(re_lm)$ID
+
+#make nice names
+make_nice_names <- function(x, betas) {
+  x[x == "(Intercept)"] <- "b0"
+  x <- str_remove(x, fixed("I("))
+  x <- str_remove(x, fixed(")"))
+  x <- str_replace(x, fixed("^"),  "_")
+  for (i in 1:length(betas)) {
+    x <- str_replace(x, betas[i],  paste0("b", i))
+  }
+  return(x)
+}
+
+names(individual_coefs) <- make_nice_names(names(individual_coefs), c("gest", "BABY"))
+# b0 + b1*gest + b2*BABY + b1_2*gest^2 + b1_3*gest^3 + `b1:b2`*gest*BABY + `b2:b1_2`*gest^2*BABY + `b2:b1_3`*gest^3*BABY
+
+poly_df <- individual_coefs %>% 
+  rownames_to_column("ID") %>%
+  mutate(ID = as.integer(ID)) %>%
+  right_join(data_reduced %>% select(ID, Albumin, gest, BABY)) %>% 
+  mutate(pred =  b0 + b1*gest + b2*BABY + b1_2*gest^2 + b1_3*gest^3 + `b1:b2`*gest*BABY + `b2:b1_2`*gest^2*BABY + `b2:b1_3`*gest^3*BABY) %>% 
+  mutate(res = Albumin - pred)
+
+poly_df %>% 
+  filter(ID %in% 1:12) %>% 
+  ggplot(aes(x = gest)) +
+  geom_line(aes(y = pred), color = "red") +
+  geom_point(aes(y = Albumin)) +
+  #geom_point(aes(y = fake_pred), color = "blue") +
+  facet_wrap(~ ID) +
+  theme_bw()
+
+###
+#simpler:
+re_lm <- lmer(data = data_reduced,
+              Albumin ~  gest*BABY + (1 + gest*BABY|ID), REML = TRUE)
+
+#b0 + b1*gest + b2*BABY + b1:b2*gest*BABY
+
+sum_model <- summary(re_lm)
+individual_coefs <- coef(re_lm)$ID
+names(individual_coefs) <- make_nice_names(names(individual_coefs), c("gest", "BABY"))
+
+poly_df <- individual_coefs %>% 
+  rownames_to_column("ID") %>%
+  mutate(ID = as.integer(ID)) %>%
+  right_join(data_reduced %>% select(ID, Albumin, gest, BABY)) %>% 
+  mutate(pred =  b0 + b1*gest + b2*BABY + `b1:b2`*gest*BABY) %>% 
+  mutate(res = Albumin - pred)
+
+poly_df %>% 
+  filter(ID %in% 20:50) %>% 
+  ggplot(aes(x = gest)) +
+  geom_line(aes(y = pred), color = "red") +
+  geom_point(aes(y = Albumin)) +
+  facet_wrap(~ ID) +
+  theme_bw()
 
 
 #mixed effect model
@@ -205,7 +306,7 @@ poly_df <- individual_coefs %>%
   rownames_to_column("ID") %>%
   mutate(ID = as.integer(ID)) %>%
   right_join(data_reduced %>% select(ID, Albumin, gest)) %>% 
-  mutate(pred =  beta1 + beta2*gest + beta3*gest^2) %>% 
+  mutate(pred =  beta0 + beta1*gest + beta2*gest^2) %>% 
   mutate(res = Albumin - pred) %>% 
   mutate(fake_pred = pred + noise)
 
@@ -215,7 +316,7 @@ poly_df %>%
   ggplot(aes(x = gest)) +
   geom_line(aes(y = pred), color = "red") +
   geom_point(aes(y = Albumin)) +
-  geom_point(aes(y = fake_pred), color = "blue") +
+  #geom_point(aes(y = fake_pred), color = "blue") +
   facet_wrap(~ ID) +
   theme_bw()
 
@@ -256,8 +357,8 @@ check_fit_plot(poly_df$gest, marg_gest$density)
 
 
 marg_res <- estimate_parametric_marginal(poly_df$res[!is.na(poly_df$res)], "norm")
-marg_res <- estimate_parametric_marginal(poly_df$res[!is.na(poly_df$res)], "t",
-                                         param = list(estimate = c()))
+#marg_res <- estimate_parametric_marginal(poly_df$res[!is.na(poly_df$res)], "t",
+ #                                        param = list(estimate = c()))
 
 marg_id <-  estimate_parametric_marginal(poly_df$ID, "unif")
 check_fit_plot(poly_df$res, marg_res$density)
@@ -295,6 +396,13 @@ vine_coefs <- vinecop(uniform_coefs)
 contour(vine_coefs)
 pairs_copula_data(uniform_coefs)
 cor(uniform_coefs, method = "kendall")
+
+pdf("results/figures/longitudinal_parameter_copula.pdf")
+contour(vine_coefs)
+pairs_copula_data(uniform_coefs)
+dev.off()
+
+
 set.seed(123)
 sim_poly_unif <- as.data.frame(rvinecop(n = m, vine_coefs))
 
@@ -347,7 +455,7 @@ poly_df_sim %>%
   theme_bw()
 
 
-poly_df %>% 
+plot_simulated_curves <- poly_df %>% 
   select(ID, gest, pred) %>% 
   mutate(type = "observed") %>% 
   bind_rows(poly_df_sim %>% 
@@ -355,6 +463,10 @@ poly_df %>%
               mutate(ID = ID + 200,
                      type = "simulated")) %>% 
   ggplot(aes(x = gest, y = pred, color = as.factor(ID), group = ID)) +
-  geom_line(show.legend = F) +
+  geom_line(show.legend = F, alpha = 0.5) +
   facet_grid(~ type) +
   theme_bw()
+
+pdf("results/figures/longitudinal_alb_polynomials_both.pdf", width = 6, height = 4)
+print(plot_simulated_curves)
+dev.off()
