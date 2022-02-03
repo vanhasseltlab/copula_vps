@@ -282,9 +282,10 @@ poly_df <- individual_coefs %>%
   mutate(pred =  b0 + b1*gest + b2*BABY + `b1:b2`*gest*BABY) %>% 
   mutate(res = Albumin - pred)
 
+#broken stick viz
 poly_df %>% 
   filter(ID %in% 20:50) %>% 
-  ggplot(aes(x = gest)) +
+  ggplot(aes(x = gest, group = BABY)) +
   geom_line(aes(y = pred), color = "red") +
   geom_point(aes(y = Albumin)) +
   facet_wrap(~ ID) +
@@ -470,3 +471,111 @@ plot_simulated_curves <- poly_df %>%
 pdf("results/figures/longitudinal_alb_polynomials_both.pdf", width = 6, height = 4)
 print(plot_simulated_curves)
 dev.off()
+
+
+
+## BABY variable
+patient_level <- data_reduced %>% 
+  group_by(ID) %>% 
+  summarize(gest_birth = ifelse(any(BABY == 1), gest[BABY == 1][which.min(gest[BABY == 1])], NA)) %>% 
+  ungroup()
+
+#simpler:
+re_lm <- lmer(data = data_reduced,
+              Albumin ~  gest*BABY + (1 + gest*BABY|ID), REML = TRUE)
+
+#b0 + b1*gest + b2*BABY + b1:b2*gest*BABY
+
+sum_model <- summary(re_lm)
+individual_coefs <- coef(re_lm)$ID
+names(individual_coefs) <- make_nice_names(names(individual_coefs), c("gest", "BABY"))
+
+poly_df <- individual_coefs %>% 
+  rownames_to_column("ID") %>%
+  mutate(ID = as.integer(ID)) %>%
+  right_join(data_reduced %>% select(ID, Albumin, gest, BABY)) %>% 
+  mutate(pred =  b0 + b1*gest + b2*BABY + `b1:b2`*gest*BABY) %>% 
+  mutate(res = Albumin - pred)
+
+#broken stick viz
+poly_df %>% 
+  filter(ID %in% 1:12) %>% 
+  ggplot(aes(x = gest, group = BABY)) +
+  geom_line(aes(y = pred), color = "red") +
+  geom_point(aes(y = Albumin)) +
+  facet_wrap(~ ID) +
+  theme_bw()
+
+
+patient_level <- patient_level %>% 
+  left_join(individual_coefs %>% rownames_to_column("ID") %>% mutate(ID = as.integer(ID))) %>% 
+  as.data.frame()
+
+#copula on patient level:
+
+
+#fit copula curves
+
+names(patient_level)
+
+par(mfrow = c(2, 3))
+for (covariate in names(patient_level)[-1]) {
+  hist(patient_level[, covariate], main = covariate)
+}
+par(mfrow = c(1, 1))
+
+#Transform all variables (splines)
+marginals <- list()
+uniform_coefs <- as.data.frame(matrix(ncol = ncol(patient_level) - 1, nrow = nrow(patient_level)))
+names(uniform_coefs) <- names(patient_level)[-1]
+for (covariate in names(patient_level)[-1]) {
+  patient_var <- patient_level[, covariate]
+  ind_na <- is.na(patient_var)
+  marginals[[covariate]] <- estimate_spline_marginal(patient_level[, covariate])
+  uniform_coefs[!ind_na, covariate] <- marginals[[covariate]]$pit(patient_level[!ind_na, covariate])
+}
+
+
+
+vine_coefs <- vinecop(uniform_coefs)
+contour(vine_coefs)
+pairs_copula_data(uniform_coefs[!is.na(uniform_coefs$gest_birth), ])
+cor(uniform_coefs, method = "kendall", use = "pairwise.complete.obs")
+
+pdf("results/figures/longitudinal_parameter_copula_baby.pdf")
+pairs_copula_data(uniform_coefs[!is.na(uniform_coefs$gest_birth), ])
+cor(uniform_coefs, method = "kendall", use = "pairwise.complete.obs")
+dev.off()
+
+m <- 100
+set.seed(123)
+sim_poly_unif <- as.data.frame(rvinecop(n = m, vine_coefs))
+
+sim_orginal <- sim_poly_unif
+for (covariate in names(sim_orginal)) {
+  patient_var <- sim_orginal[, covariate]
+  ind_na <- is.na(patient_var)
+  sim_orginal[!ind_na, covariate] <- marginals[[covariate]]$pdf(sim_orginal[!ind_na, covariate])
+}
+
+pairs(sim_orginal)
+pairs(patient_level[, -1])
+
+#transform to useful numbers
+
+times <- seq(min(sim_orginal$gest_birth), max(sim_orginal$gest_birth), by = 1/7)
+
+poly_df_sim <- sim_orginal %>% 
+  rownames_to_column("ID") %>%
+  right_join(as.data.frame(expand_grid(gest = times, ID = rownames(sim_orginal)))) %>% 
+  mutate(BABY = as.numeric(gest_birth <= gest)) %>% 
+  mutate(Albumin =  b0 + b1*gest + b2*BABY + `b1:b2`*gest*BABY)
+
+
+
+poly_df_sim  %>% 
+  dplyr::filter(ID %in% 1:12) %>% 
+  ggplot(aes(x = gest, group = BABY)) +
+  geom_line(aes(y = Albumin), color = "red") +
+  facet_wrap(~ ID) +
+  theme_bw()
