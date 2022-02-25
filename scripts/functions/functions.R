@@ -42,6 +42,7 @@ get_statistics_multiple_sims <- function(data_set, m, n_statistics, columns = NU
 
 #estimate splines using fitdistrplus package and actuar package for extra distribution options
 estimate_spline_marginal <- function(covariate, xmin = NaN) {
+  covariate <- covariate[!is.na(covariate)]
   param <- kde1d(covariate, xmin = xmin)
   marg <- list(pdf = function(u) qkde1d(u, param),
                pit = function(x) pkde1d(x, param),
