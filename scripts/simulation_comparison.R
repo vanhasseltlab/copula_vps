@@ -34,6 +34,7 @@ data_total <- data_t0 %>%
 ##### - Functions - #####
 source("scripts/functions/functions.R")
 source("scripts/functions/Smania_Jonsson_MICE_simulation.R")
+source("scripts/functions/plot_distributions.R")
 
 ##### - Simulations - #####
 # Simulation settings
@@ -65,7 +66,7 @@ obs_results <- get_statistics(data_test, columns = c("age", "BW", "CREA"))
 
 #### - Copulas I: parametric - ####
 # Fit distribution
-param_crea_raw <- mixtools::normalmixEM(data_clean$CREA)
+param_crea_raw <- mixtools::normalmixEM(data_clean$CREA, mu = c(20, 60))
 param_crea <- list(estimate = c(mean1 = param_crea_raw$mu[1], sd1 = param_crea_raw$sigma[1], 
                                 mean2 = param_crea_raw$mu[2], sd2 = param_crea_raw$sigma[2], 
                                 p.mix = param_crea_raw$lambda[2]))
@@ -116,6 +117,32 @@ sim_copula_II <- data.frame(CREA = marg_crea$pdf(sim_unif$CREA),
                            simulation_nr = rep(1:m, each = n_sim))
 # Get result statistics
 copula_II_results <- get_statistics_multiple_sims(sim_copula_II, m, n_statistics, type = "copula_II")
+
+#### - Copulas III: mix spline marginal + parametric copula - ####
+# Fit distribution
+marg_crea <- estimate_spline_marginal(data_clean$CREA)
+marg_age <- estimate_spline_marginal(data_clean$age)
+marg_BW <- estimate_spline_marginal(data_clean$BW)
+
+data_unif <- data.frame(CREA = tranform_to_uniform(data_clean$CREA, marg_crea),
+                        age = tranform_to_uniform(data_clean$age, marg_age),
+                        BW = tranform_to_uniform(data_clean$BW, marg_BW))
+
+vine_fit <- vinecop(data_unif, family_set = "parametric", var_types = c("c", "c", "c"))
+vine_distribution <- vinecop_dist(vine_fit$pair_copulas, vine_fit$structure, var_types =  c("c", "c", "c"))
+# Draw sample
+set.seed(seed_nr)
+sim_unif <- as.data.frame(rvinecop(n_sim*m, vine_distribution))
+names(sim_unif) <- names(data_unif)[1:3]
+sim_copula_III <- data.frame(CREA = marg_crea$pdf(sim_unif$CREA),
+                             age = marg_age$pdf(sim_unif$age),
+                             BW = marg_BW$pdf(sim_unif$BW),
+                             type = "simulated", 
+                             simulation_nr = rep(1:m, each = n_sim))
+
+copula_III_results <- get_statistics_multiple_sims(sim_copula_III, m, n_statistics, type = "copula_III")
+
+
 
 
 #### - Marginals I: parametric - ####
@@ -183,9 +210,10 @@ names(sim_cd)[names(sim_cd) == "NSIM"] <- "simulation_nr"
 cd_results <- get_statistics_multiple_sims(sim_cd, m, n_statistics, type = "conditional distribution")
 
 ##### - Plot Results - #####
-all_statistics <- copula_I_results %>% 
-  bind_rows(copula_II_results) %>% 
-  bind_rows(marginal_I_results) %>% 
+all_statistics <- copula_III_results %>% 
+  #bind_rows(copula_I_results) %>% 
+  #bind_rows(copula_II_results) %>% 
+  #bind_rows(marginal_I_results) %>% 
   bind_rows(marginal_II_results) %>% 
   bind_rows(mvnorm_results) %>% 
   bind_rows(cd_results)
@@ -204,15 +232,14 @@ results_plot <-  all_statistics %>%
   scale_linetype_manual(values = 2, name = NULL) +
   theme_bw()
 
-results_plot_relative <-  all_statistics %>% 
+results_plot_relative <- all_statistics %>% 
   filter(statistic %in% c("mean", "median", "sd") | covariate == "all") %>% 
   left_join(obs_results %>% rename(observed = value)) %>% 
   mutate(rel_value = (value - observed)/observed) %>% 
   ggplot(aes(y = rel_value, x = type, color = covariate)) +
+  geom_boxplot() +
   geom_hline(yintercept = c(-0.2, 0.2), linetype = 2, color = "grey65") +
   geom_hline(yintercept = 0, linetype = 2, color = "black") +
-  geom_boxplot() +
-  
   scale_x_discrete(guide = guide_axis(angle = 90)) +
   facet_wrap(statistic ~ covariate , scales = "free_y", nrow = 3, dir = "v") +
   theme_bw()
@@ -220,19 +247,22 @@ results_plot_relative <-  all_statistics %>%
 pdf(paste0("results/figures/simulation_statistics_", simulation_type,".pdf"), height = 7, width = 10)
 print(results_plot)
 print(results_plot_relative)
-plot_comparison_distribution_sim_obs(sim_cd, data_test, sim_nr = 1, 
+plot_comparison_distribution_sim_obs(sim_cd, data_test, sim_nr = 2, 
                                      plot_type = "both", title = "Conditional Distributions")
-plot_comparison_distribution_sim_obs(sim_copula_I, data_test, sim_nr = 1, 
-                                     plot_type = "both", title = "Copula I")
-plot_comparison_distribution_sim_obs(sim_copula_II, data_test, sim_nr = 1, 
-                                     plot_type = "both", title = "Copula II")
+plot_comparison_distribution_sim_obs(sim_copula_III, data_test, sim_nr = 2, 
+                                     plot_type = "both", title = "Copula III")
+plot_comparison_distribution_sim_obs(sim_mvnorm, data_test, sim_nr = 2, 
+                                     plot_type = "both", title = "Multivariate normal")
+plot_comparison_distribution_sim_obs(sim_marginal, data_test, sim_nr = 2, 
+                                     plot_type = "both", title = "Marginal")
 dev.off()
 
 bias_variance <- all_statistics %>% 
   left_join(obs_results %>% rename(observed = value)) %>% 
   mutate(rdiff = (value - observed)/observed) %>% 
   group_by(statistic, covariate, type) %>% 
-  summarize(rBias = abs(mean(rdiff)), rRMSE = sqrt(mean(rdiff^2)), .groups = "keep") %>% 
+  summarize(rBias = abs(mean(rdiff)), rRMSE = sqrt(mean(rdiff^2)), 
+            .groups = "keep") %>% 
   ungroup()
 
 colors_sim <- c("#D41212", "#2E9BFB", "#1C69AD", "#E2943C", "#B16919", "#73BB2D")
@@ -247,6 +277,18 @@ bias_variance_plot <- bias_variance %>%
   facet_wrap(statistic ~ covariate, nrow = 3, dir = "v") +
   theme_bw()
 
+bias_variance %>% 
+  filter(statistic %in% c("mean", "median", "sd") | covariate == "all") %>% 
+  ggplot(aes(y = rBias, x = rRMSE, color = type, shape = type)) +
+  geom_vline(xintercept = 0, linetype = 2, color = "grey65") +
+  geom_hline(yintercept = 0, linetype = 2, color = "grey65") +
+  geom_point() +
+  scale_color_manual(values = colors_sim) +
+  facet_wrap(statistic ~ covariate, nrow = 3, dir = "v") +
+  theme_bw()
+
+
 pdf(paste0("results/figures/simulation_statistics_bias_var_", simulation_type,".pdf"), height = 5, width = 8)
 print(bias_variance_plot)
 dev.off()
+
