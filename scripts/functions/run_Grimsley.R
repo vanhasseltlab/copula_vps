@@ -1,5 +1,5 @@
 
-run_grimsley <- function(n, wgt, scr, verbose = F) {
+run_grimsley <- function(n, wgt, scr, other_covariates = NULL, verbose = F) {
   
   if (length(wgt) != n | length(scr) != n) {
     stop("covariate input does not match the number of subjects")
@@ -51,11 +51,14 @@ run_grimsley <- function(n, wgt, scr, verbose = F) {
     addCov = T
   )
   
+  df_sim <- df_sim %>% 
+    left_join(covar %>% dplyr::select(id, all_of(names(other_covariates))))
+  
   if (verbose == T) {
     return(df_sim)
   } else {
     df_sim %>%
-      select(id, time, conc = C1, wgt, scr) %>%
+      dplyr::select(id, time, conc = C1, wgt, scr, all_of(names(other_covariates))) %>%
       distinct() %>% 
       return()
   }
