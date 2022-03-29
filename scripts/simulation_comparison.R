@@ -7,6 +7,7 @@ library(actuar)
 library(EnvStats)
 library(mvtnorm)
 library(kde1d)
+select <- dplyr::select
 
 ##### - Data - #####
 # Load data
@@ -15,7 +16,7 @@ pediatric_data_raw <- read.csv("data/GTV_final_roos_final2.csv", na.strings = ".
 # Clean data
 data_t0 <- pediatric_data_raw %>% 
   filter(TIME == 0) %>% 
-  select(-c(TIME, DV, MDV)) %>% 
+  dplyr::select(-c(TIME, DV, MDV)) %>% 
   mutate(AGED = round(AGEW*7)) %>% 
   mutate(age = ifelse(AGED == 0, AGED, AGED - 1))
 
@@ -24,11 +25,15 @@ age_no_crea <- data_t0 %>% group_by(age) %>%
   ungroup() %>% 
   filter(crea_imputed) %>% unlist() %>% max()
 
-data_total <- data_t0 %>% 
+data_full <- data_t0 %>% 
   filter(!ID %in% c(2004, 2175, 2141)) %>% 
   filter(GRP %in% c(1, 2)) %>%
-  filter(age > age_no_crea) %>%
-  select(age, BW, CREA)
+  filter(age > age_no_crea)
+
+data.table::fwrite(data_full, file = "data/clean/pediatric_data.csv")
+
+data_total <- data_full %>%
+  dplyr::select(age, BW, CREA)
 
 
 ##### - Functions - #####
@@ -143,6 +148,13 @@ sim_copula_III <- data.frame(CREA = marg_crea$pdf(sim_unif$CREA),
 copula_III_results <- get_statistics_multiple_sims(sim_copula_III, m, n_statistics, type = "copula_III")
 
 
+if (simulation_type == "full_data") {
+  example_data <- sim_copula_III %>% 
+    filter(simulation_nr == 1) %>% 
+    dplyr::select(CREA, age, BW) %>% 
+    rownames_to_column("ID")
+  write.csv(example_data, file = "example_data/pediatrics_example_data.csv", row.names = FALSE, quote = FALSE)
+}
 
 
 #### - Marginals I: parametric - ####
@@ -184,7 +196,7 @@ marginal_II_results <- get_statistics_multiple_sims(sim_marginal, m, n_statistic
 data_clean_trans <- data_clean %>% 
   mutate(log_BW = log(BW),
          log_age = log(age)) %>% 
-  select(log_age, log_BW, CREA)
+  dplyr::select(log_age, log_BW, CREA)
 mvnorm_param <- Rfast::mvnorm.mle(as.matrix(data_clean_trans))
 mvnorm_fit <- list(pdf = function(u) qmvnorm(u, mean = mvnorm_param$mu, sigma = mvnorm_param$sigma),
                    pit = function(x) pmvnorm(x, mean = mvnorm_param$mu, sigma = mvnorm_param$sigma),
@@ -220,6 +232,19 @@ all_statistics <- copula_III_results %>%
 
 write.csv(all_statistics, file = paste0("results/comparison/results_", simulation_type, ".csv"), row.names = F)
 
+all_sim <- sim_copula_III %>% 
+  mutate(simulation = "copula") %>% 
+  bind_rows(sim_marginal %>% 
+              mutate(simulation = "marginal") ) %>% 
+  bind_rows(sim_mvnorm %>% 
+              mutate(simulation = "mvnorm") ) %>% 
+  bind_rows(sim_cd %>% 
+              mutate(simulation = "cd")) %>% 
+  bind_rows(data_clean %>% mutate(simulation = "observed"))
+
+
+write.csv(all_sim, file = paste0("results/comparison/simulated_values_", simulation_type, ".csv"), row.names = F)
+
 results_plot <-  all_statistics %>% 
   filter(statistic %in% c("mean", "median", "sd") | covariate == "all") %>% 
   ggplot(aes(y = value, x = type, color = covariate)) +
@@ -247,13 +272,13 @@ results_plot_relative <- all_statistics %>%
 pdf(paste0("results/figures/simulation_statistics_", simulation_type,".pdf"), height = 7, width = 10)
 print(results_plot)
 print(results_plot_relative)
-plot_comparison_distribution_sim_obs(sim_cd, data_test, sim_nr = 2, 
+plot_comparison_distribution_sim_obs_generic(sim_cd, data_test, sim_nr = 2, variables = c("age", "BW", "CREA"), 
                                      plot_type = "both", title = "Conditional Distributions")
-plot_comparison_distribution_sim_obs(sim_copula_III, data_test, sim_nr = 2, 
+plot_comparison_distribution_sim_obs_generic(sim_copula_III, data_test, sim_nr = 2,  variables = c("age", "BW", "CREA"), 
                                      plot_type = "both", title = "Copula III")
-plot_comparison_distribution_sim_obs(sim_mvnorm, data_test, sim_nr = 2, 
+plot_comparison_distribution_sim_obs_generic(sim_mvnorm, data_test, sim_nr = 2,  variables = c("age", "BW", "CREA"), 
                                      plot_type = "both", title = "Multivariate normal")
-plot_comparison_distribution_sim_obs(sim_marginal, data_test, sim_nr = 2, 
+plot_comparison_distribution_sim_obs_generic(sim_marginal, data_test, sim_nr = 2,  variables = c("age", "BW", "CREA"), 
                                      plot_type = "both", title = "Marginal")
 dev.off()
 
@@ -276,17 +301,6 @@ bias_variance_plot <- bias_variance %>%
   scale_color_manual(values = colors_sim) +
   facet_wrap(statistic ~ covariate, nrow = 3, dir = "v") +
   theme_bw()
-
-bias_variance %>% 
-  filter(statistic %in% c("mean", "median", "sd") | covariate == "all") %>% 
-  ggplot(aes(y = rBias, x = rRMSE, color = type, shape = type)) +
-  geom_vline(xintercept = 0, linetype = 2, color = "grey65") +
-  geom_hline(yintercept = 0, linetype = 2, color = "grey65") +
-  geom_point() +
-  scale_color_manual(values = colors_sim) +
-  facet_wrap(statistic ~ covariate, nrow = 3, dir = "v") +
-  theme_bw()
-
 
 pdf(paste0("results/figures/simulation_statistics_bias_var_", simulation_type,".pdf"), height = 5, width = 8)
 print(bias_variance_plot)
