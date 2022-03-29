@@ -2,13 +2,13 @@
 
 #common generic functions (methods) print(), plot(), summary()
 
-variables_of_interest <- c("Platelets", "SCr", "Albumin", "Bilirubin", "Lymphocytes", "Neutrophils", "gest")
-
-estimate_vinecopula_from_data <- function(dat, variables_of_interest = NULL, polynomial = FALSE, ID_name = NULL, time_name = NULL) {
+estimate_vinecopula_from_data <- function(dat, variables_of_interest = NULL, 
+                                          polynomial = FALSE, ID_name = NULL, 
+                                          time_name = NULL, ...) {
   
   if(is.null(variables_of_interest)) {
     #create set of variables between which the copula is made
-    variables_of_interest <- setdiff(colnames(dat), ID_name)
+    variables_of_interest <- setdiff(colnames(dat), c(ID_name, time_name))
   }
   
   if (polynomial) {
@@ -29,7 +29,7 @@ estimate_vinecopula_from_data <- function(dat, variables_of_interest = NULL, pol
       re_lm <- lmer(data = dat, formula_v, REML = TRUE)
       individual_coefs <- coef(re_lm)$ID
       
-      dat_out[grep(paste0("_", variable), names(dat_out))] <-  coef(re_lm)[, ID_name]
+      dat_out[grep(paste0("_", variable), names(dat_out))] <-  coef(re_lm)[[ID_name]]
     }
   } else {
     dat_out <- dat[, variables_of_interest]
@@ -44,7 +44,7 @@ estimate_vinecopula_from_data <- function(dat, variables_of_interest = NULL, pol
     dat_out[!ind_na, variable] <- marginals[[variable]]$pit(dat_out[!ind_na, variable])
   }
   
-  vine_coefs <- vinecop(dat_out)
+  vine_coefs <- vinecop(dat_out, ...)
   
   vine_output <- list(vine_copula = vine_coefs, marginals = marginals, uniform_data = dat_out, 
                       polynomial = polynomial, 
@@ -64,82 +64,45 @@ plot.estVineCopula <- function(vine_output, ...) {
 contour.estVineCopula <- function(vine_output, ...) {
   contour(vine_output$vine_copula, ...)
 }
-#x=vine_output
-#simulation from estimated vine copula
 
+#simulation from estimated vine copula
 simulate.estVineCopula <- function(vine_output, n) {
   
   #Simulation
-  dat_sim <- as.data.frame(rvinecop(n, x$vine_copula))
+  dat_sim <- as.data.frame(rvinecop(n, vine_output$vine_copula))
   
   for (variable in names(dat_sim)) {
     ind_na <- is.na(dat_sim[, variable])
-    dat_sim[!ind_na, variable] <- x$marginals[[variable]]$pdf(dat_sim[!ind_na, variable])
+    dat_sim[!ind_na, variable] <- vine_output$marginals[[variable]]$pdf(dat_sim[!ind_na, variable])
   }
   
   #polynomials
-  if (x$polynomial) {
-    gest_times <- seq(x$time_range[1], x$time_range[2], length.out = 100)
+  if (vine_output$polynomial) {
+    gest_times <- seq(vine_output$time_range[1], vine_output$time_range[2], length.out = 100)
     time_data <- as.data.frame(expand_grid(rownames(dat_sim), gest_times))
-    names(time_data) <- x$names
+    names(time_data) <- vine_output$names
     df_sim <- dat_sim %>% 
-      rownames_to_column(x$names["ID_name"]) %>%
-      right_join(time_data, by = c("ID", "gest"))
+      rownames_to_column(vine_output$names["ID_name"]) %>%
+      right_join(time_data)
     
-    for (variable in x$variables_of_interest) {
+    for (variable in vine_output$variables_of_interest) {
       col_ind <- grep(paste0("_", variable), names(df_sim))
-      df_sim[, variable] <- df_sim[, col_ind[1]] + df_sim[, col_ind[2]]*df_sim[, x$names["time_name"]] + 
-        df_sim[, col_ind[3]]*df_sim[, x$names["time_name"]]^2
+      df_sim[, variable] <- df_sim[, col_ind[1]] + df_sim[, col_ind[2]]*df_sim[, vine_output$names["time_name"]] + 
+        df_sim[, col_ind[3]]*df_sim[, vine_output$names["time_name"]]^2
     }
     
     
     df_poly <- coef_data_raw %>% 
       rownames_to_column("ID") %>%
-      right_join(as.data.frame(expand_grid(gest = gest_times, ID = rownames(coef_data_raw))))
+      right_join(as.data.frame(expand_grid(time = gest_times, ID = rownames(coef_data_raw))))
     
-    for (variable in variables_of_interest) {
+    for (variable in vine_output$variables_of_interest) {
       col_ind <- grep(paste0("_", variable), names(df_poly))
-      df_poly[, variable] <- df_poly[, col_ind[1]] + df_poly[, col_ind[2]]*df_poly$gest + df_poly[, col_ind[3]]*df_poly$gest^2
+      df_poly[, variable] <- df_poly[, col_ind[1]] + df_poly[, col_ind[2]]*df_poly$time + df_poly[, col_ind[3]]*df_poly$time^2
     } 
+    return(df_poly %>% select(all_of(c("ID", "time", variables_of_interest))))
   }
+  
+  return(dat_sim)
 }
 
-
-
-test_est <- estimate_vinecopula_from_data(data_total)
-contour(test_est)
-
-
-simulate_from_vinecopula <- function(vine_copula, marginals, n) {
-  
-  #Simulation
-  dat_sim <- as.data.frame(rvinecop(n, vine_copula))
-  
-  for (variable in names(dat_sim)) {
-    ind_na <- is.na(dat_sim[, variable])
-    dat_sim[!ind_na, variable] <- marginals[[variable]]$pdf(dat_sim[!ind_na, variable])
-  }
-  
-  #polynomials
-  if (polynomial) {
-    gest_times <- seq(time_range[1], time_range[2], length.out = 100)
-    df_sim <- dat_sim %>% 
-      rownames_to_column(names$ID_name) %>%
-      right_join(as.data.frame(expand_grid(gest = gest_times, ID = rownames(dat_sim))))
-    
-    for (variable in variables_of_interest) {
-      col_ind <- grep(paste0("_", variable), names(df_sim))
-      df_sim[, variable] <- df_sim[, col_ind[1]] + df_sim[, col_ind[2]]*df_sim$gest + df_sim[, col_ind[3]]*df_sim$gest^2
-    }
-    
-    
-    df_poly <- coef_data_raw %>% 
-      rownames_to_column("ID") %>%
-      right_join(as.data.frame(expand_grid(gest = gest_times, ID = rownames(coef_data_raw))))
-    
-    for (variable in variables_of_interest) {
-      col_ind <- grep(paste0("_", variable), names(df_poly))
-      df_poly[, variable] <- df_poly[, col_ind[1]] + df_poly[, col_ind[2]]*df_poly$gest + df_poly[, col_ind[3]]*df_poly$gest^2
-    } 
-  }
-}
