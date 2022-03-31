@@ -1,5 +1,6 @@
 #Make function for vinecopula (spline-based)
-
+library(kde1d)
+library(rvinecopulib)
 #common generic functions (methods) print(), plot(), summary()
 
 estimate_vinecopula_from_data <- function(dat, variables_of_interest = NULL, 
@@ -38,15 +39,17 @@ estimate_vinecopula_from_data <- function(dat, variables_of_interest = NULL,
   
   #estimate the marginal splines for each variable and create uniform data set
   marginals <- list()
-  for (variable in names(dat_out)) {
+  dat_unif <- dat_out
+  for (variable in names(dat_unif)) {
     marginals[[variable]] <- estimate_spline_marginal(dat_out[, variable])
-    ind_na <- is.na(dat_out[, variable])
-    dat_out[!ind_na, variable] <- marginals[[variable]]$pit(dat_out[!ind_na, variable])
+    ind_na <- is.na(dat_unif[, variable])
+    dat_unif[!ind_na, variable] <- marginals[[variable]]$pit(dat_unif[!ind_na, variable])
   }
   
-  vine_coefs <- vinecop(dat_out, ...)
+  vine_coefs <- vinecop(dat_unif, ...)
   
-  vine_output <- list(vine_copula = vine_coefs, marginals = marginals, uniform_data = dat_out, 
+  vine_output <- list(vine_copula = vine_coefs, marginals = marginals, 
+                      uniform_data = dat_unif, original_data = dat_out, 
                       polynomial = polynomial, 
                       names = c(ID_name = ID_name, time_name = time_name), 
                       time_range = time_range, 
@@ -66,7 +69,9 @@ contour.estVineCopula <- function(vine_output, ...) {
 }
 
 #simulation from estimated vine copula
-simulate.estVineCopula <- function(vine_output, n) {
+#value_only = TRUE for longitudinal predictions, or FALSE for list with 
+#   parameters and longitudinal predictions
+simulate.estVineCopula <- function(vine_output, n, value_only = TRUE) {
   
   #Simulation
   dat_sim <- as.data.frame(rvinecop(n, vine_output$vine_copula))
@@ -81,26 +86,21 @@ simulate.estVineCopula <- function(vine_output, n) {
     gest_times <- seq(vine_output$time_range[1], vine_output$time_range[2], length.out = 100)
     time_data <- as.data.frame(expand_grid(rownames(dat_sim), gest_times))
     names(time_data) <- vine_output$names
-    df_sim <- dat_sim %>% 
+    suppressMessages(df_sim <- dat_sim %>% 
       rownames_to_column(vine_output$names["ID_name"]) %>%
-      right_join(time_data)
+      right_join(time_data))
     
     for (variable in vine_output$variables_of_interest) {
       col_ind <- grep(paste0("_", variable), names(df_sim))
       df_sim[, variable] <- df_sim[, col_ind[1]] + df_sim[, col_ind[2]]*df_sim[, vine_output$names["time_name"]] + 
         df_sim[, col_ind[3]]*df_sim[, vine_output$names["time_name"]]^2
     }
-    
-    
-    df_poly <- coef_data_raw %>% 
-      rownames_to_column("ID") %>%
-      right_join(as.data.frame(expand_grid(time = gest_times, ID = rownames(coef_data_raw))))
-    
-    for (variable in vine_output$variables_of_interest) {
-      col_ind <- grep(paste0("_", variable), names(df_poly))
-      df_poly[, variable] <- df_poly[, col_ind[1]] + df_poly[, col_ind[2]]*df_poly$time + df_poly[, col_ind[3]]*df_poly$time^2
-    } 
-    return(df_poly %>% select(all_of(c("ID", "time", variables_of_interest))))
+    output <- df_sim %>% dplyr::select(all_of(c(as.character(vine_output$names), vine_output$variables_of_interest)))
+    if (value_only) {
+      return(output)
+    } else {
+      return(list(values = output, parameters = dat_sim))
+    }
   }
   
   return(dat_sim)
