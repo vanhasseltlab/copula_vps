@@ -18,27 +18,33 @@ plot_comparison_distribution_sim_obs_generic <- function(sim_data, obs_data, var
   if (is.null(variables)) {
     variables <- setdiff(colnames(sim_data), "simulation_nr")
   }
-  
+  variables_str <- paste0("`", variables, "`")
 
   point_plots <- density_plots <- list()
-  combination_variables <- t(combn(variables, 2))
+  combination_variables <- cbind(t(combn(variables_str, 2)), t(combn(variables, 2)))
   for (i in 1:nrow(combination_variables)) {
-    combination <- paste(combination_variables[i, ], collapse = "_")
-    point_plots[[combination]] <- ggplot(mapping = aes_string(x = combination_variables[i, 1], y = combination_variables[i, 2])) +
-      geom_point(data = total_data[total_data$type == "simulated", ], alpha = 0.3, shape = 16, color = pick_color[1]) +
-      geom_point(data = total_data[total_data$type == "observed", ], alpha = 0.8, shape = 16, color = pick_color[2]) +
-      theme_bw() + 
-      theme(legend.position = "none")
+    combination <- paste(combination_variables[i, 3:4], collapse = "_")
+    part_data <- total_data[, c(combination_variables[i, 3:4], "type")] %>% 
+      filter(rowSums(is.na(total_data[, combination_variables[i, 3:4]])) == 0)
     
-    density_plots[[combination]] <- ggplot(mapping = aes_string(x = combination_variables[i, 1], y = combination_variables[i, 2])) +
-      geom_density2d(data = total_data[total_data$type == "simulated", ], color = pick_color[1]) +
-      geom_density2d(data = total_data[total_data$type == "observed", ],  alpha = 1, color = pick_color[2], linetype = 2) +
-      theme_bw() +
-      theme(legend.position = "none")
+    if (plot_type != "density") {
+      point_plots[[combination]] <- ggplot(mapping = aes_string(x = combination_variables[i, 1], y = combination_variables[i, 2])) +
+        geom_point(data = part_data[part_data$type == "simulated", ], alpha = 0.3, shape = 16, color = pick_color[1]) +
+        geom_point(data = part_data[part_data$type == "observed", ], alpha = 0.8, shape = 16, color = pick_color[2]) +
+        theme_bw() + 
+        theme(legend.position = "none")
+    }
+    if (plot_type != "points") {
+      density_plots[[combination]] <- ggplot(mapping = aes_string(x = combination_variables[i, 1], y = combination_variables[i, 2])) +
+        geom_density2d(data = part_data[part_data$type == "simulated", ], color = pick_color[1]) +
+        geom_density2d(data = part_data[part_data$type == "observed", ],  alpha = 1, color = pick_color[2], linetype = 2) +
+        theme_bw() +
+        theme(legend.position = "none")
+    }
   }
   
   univariate_plots <- list()
-  for (i in variables) {
+  for (i in variables_str) {
     univariate_plots[[i]] <- total_data %>% 
       ggplot(aes_string(y = i, x = "type", fill = "type")) +
       geom_boxplot() +

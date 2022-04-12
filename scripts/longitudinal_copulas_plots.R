@@ -118,7 +118,40 @@ print(poly_df %>%
         theme_bw())
 dev.off()
 
+something = "b"
+test_exp <- expression(paste(hat("y"), "=", something))
 
+
+test_exp <- bquote(italic(hat("y"))~"="~.(something)[0]~"+"~.(round(something)[1]*"\u00B7"*age~"+"~.(something)[2]*"\u00B7"*age^2))
+
+
+plot(1:10, 1:10, main = test_exp)
+
+eq <- ddply(df,.(group),lm_eqn)
+
+
+poly_plot_df <- poly_df %>% 
+  filter(ID %in% c(23, 45, 93, 15, 2, 9)) %>% 
+  mutate(ID = paste0("ID", as.numeric(as.factor(ID)))) %>% 
+  group_by(ID) %>% 
+  mutate(form = as.character(as.expression(bquote(italic(hat("y"))~"="~.(round(b0[1], 2))~"+"~.(round(b1[1], 2))*"\u00B7"*age~"+"~.(formatC(b2[1], 1, format = "e"))*"\u00B7"*age^2)))) %>% 
+  ungroup()
+
+
+poly_plot_df_dist <- poly_plot_df %>% distinct(ID, form)
+
+pdf("results/figures/longitudinal_alb_polynomials_example.pdf", width = 7, height = 4)
+print(poly_plot_df %>% 
+        ggplot(aes(x = gest)) +
+        geom_text(aes(label = form), parse = TRUE, x = 22, y = 49, size = 2.3) +
+        geom_line(aes(y = pred), color = "red") +
+        geom_point(aes(y = Albumin)) +
+        labs(y = "Albumin concentration", x = "Gestational age") +
+        facet_wrap(~ ID) +
+        theme_bw())
+dev.off()
+
+citation("rvinecopulib")
 #copula
 
 hist(individual_coefs$b0)

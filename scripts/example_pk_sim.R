@@ -3,7 +3,7 @@ library(RxODE)
 library(DescTools)
 
 # load function
-source("./scripts/fun.R", local = T)
+source("./scripts/functions/run_Grimsley.R", local = T)
 
 # import covariate data
 dat_covar <- read_csv("./example_data/pediatrics_example_data.csv")
@@ -11,7 +11,7 @@ dat_covar <- read_csv("./example_data/pediatrics_example_data.csv")
 # run simulation
 df_test <- run_grimsley(
   n = length(dat_covar$ID), # number of subjects
-  wgt = dat_covar$BW, # body weight input (kg)
+  wgt = dat_covar$BW/1000, # body weight input (kg)
   scr = dat_covar$CREA # serum creatinine (umol/l)
 )
 

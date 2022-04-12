@@ -40,7 +40,7 @@ run_grimsley <- function(n, wgt, scr, other_covariates = NULL, verbose = F) {
   covar <- data.frame(
     id = seq_len(n),
     wgt = wgt,
-    scr = scr
+    scr = scr, other_covariates
   )
   
   # Run simulation
@@ -52,7 +52,7 @@ run_grimsley <- function(n, wgt, scr, other_covariates = NULL, verbose = F) {
   )
   
   df_sim <- df_sim %>% 
-    left_join(covar %>% dplyr::select(id, all_of(names(other_covariates))))
+    left_join(covar %>% dplyr::select(id, all_of(names(other_covariates))), by = "id")
   
   if (verbose == T) {
     return(df_sim)

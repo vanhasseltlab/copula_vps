@@ -13,8 +13,8 @@ get_statistics <- function(data_set, columns = NULL) {
   univariate <- as.data.frame(apply(data_set[, columns], 2, stats))
   
   multivariate <- reshape2::melt(replace(covariance_mat, lower.tri(covariance_mat, TRUE), NA), na.rm = TRUE) %>% 
-    mutate(statistic = paste("cov", Var1, Var2, sep = "_"), covariate = "all") %>% 
-    select(statistic, covariate, value)
+    mutate(statistic = "covariance", covariate = paste(Var1, Var2, sep = "_")) %>% 
+    dplyr::select(statistic, covariate, value)
   
   long_format <- univariate %>% 
     rownames_to_column("statistic") %>% 

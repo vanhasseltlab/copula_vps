@@ -5,7 +5,7 @@ library(rvinecopulib)
 
 estimate_vinecopula_from_data <- function(dat, variables_of_interest = NULL, 
                                           polynomial = FALSE, ID_name = NULL, 
-                                          time_name = NULL, ...) {
+                                          time_name = NULL, keep_data = FALSE, ...) {
   
   if(is.null(variables_of_interest)) {
     #create set of variables between which the copula is made
@@ -36,7 +36,7 @@ estimate_vinecopula_from_data <- function(dat, variables_of_interest = NULL,
     dat_out <- dat[, variables_of_interest]
     time_range <- NULL
   }
-  
+  print("Starting marginal estimation")
   #estimate the marginal splines for each variable and create uniform data set
   marginals <- list()
   dat_unif <- dat_out
@@ -46,14 +46,25 @@ estimate_vinecopula_from_data <- function(dat, variables_of_interest = NULL,
     dat_unif[!ind_na, variable] <- marginals[[variable]]$pit(dat_unif[!ind_na, variable])
   }
   
+  print("End marginal estimation")
+  print("Start copula estimation")
   vine_coefs <- vinecop(dat_unif, ...)
+  print("End copula estimation")
   
+  if (keep_data) {
   vine_output <- list(vine_copula = vine_coefs, marginals = marginals, 
                       uniform_data = dat_unif, original_data = dat_out, 
                       polynomial = polynomial, 
                       names = c(ID_name = ID_name, time_name = time_name), 
                       time_range = time_range, 
                       variables_of_interest = variables_of_interest)
+  } else {
+    vine_output <- list(vine_copula = vine_coefs, marginals = marginals, 
+                        polynomial = polynomial, 
+                        names = c(ID_name = ID_name, time_name = time_name), 
+                        time_range = time_range, 
+                        variables_of_interest = variables_of_interest)
+  }
   
   class(vine_output) <- "estVineCopula"
   
@@ -74,7 +85,15 @@ contour.estVineCopula <- function(vine_output, ...) {
 simulate.estVineCopula <- function(vine_output, n, value_only = TRUE) {
   
   #Simulation
-  dat_sim <- as.data.frame(rvinecop(n, vine_output$vine_copula))
+  if (any(vine_output$vine_copula$var_types == "d")) {
+    vine_distribution <- vinecop_dist(vine_output$vine_copula$pair_copulas, vine_output$vine_copula$structure, var_types =  vine_output$vine_copula$var_types)
+    dat_sim <- as.data.frame(rvinecop(n, vine_distribution))
+    names(dat_sim) <- vine_output$variables_of_interest[1:ncol(dat_sim)]
+  } else {
+    dat_sim <- as.data.frame(rvinecop(n, vine_output$vine_copula))
+  }
+  
+  
   
   for (variable in names(dat_sim)) {
     ind_na <- is.na(dat_sim[, variable])
