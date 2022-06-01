@@ -6,6 +6,8 @@ source("scripts/functions/estimate_vinecopula_from_data.R")
 source("scripts/functions/functions.R")
 source("scripts/functions/run_Grimsley.R")
 source("scripts/functions/plot_distributions.R")
+color_palette <- create_colors(c("Observed", "Copula", "Marginal", "CD", "MVN"), 
+                               selected = c("grey", "turquoise", "dark yellow", "pink", "dark green"))
 
 #cleaned data from simulation_comparison.R
 data_grimsley <- read.csv("data/clean/pediatric_data.csv") %>%
@@ -34,8 +36,8 @@ df_pk <- df_copula %>% mutate(type = "copula") %>%
 # plot
 plot_lines_weight <- df_pk %>% 
   filter(id %in% 1:nrow(data_grimsley)) %>% 
-  ggplot(aes(x = time/60, y = conc, group = id, color = wgt)) +
-  geom_line(alpha = 0.3) +
+  ggplot(aes(x = time/60)) +
+  geom_line(aes(y = conc, group = id, color = wgt), alpha = 0.3) +
   scale_color_viridis_c(trans = "log10") +
   scale_x_continuous(name = "Time (hours)", breaks = c(0:9)*8) +
   scale_y_continuous(name = "Concentration (mg/L)", expand = expansion(mult = c(0.01, 0.05))) +
@@ -68,8 +70,54 @@ pdf("results/figures/PK_model_assessment.pdf", width = 8, height = 5)
 
 print(plot_pk_summary)
 print(plot_lines_weight)
+
+print(plot_lines_weight + geom_line(data = df_pk_summary, aes(y = median)) +
+        geom_line(data = df_pk_summary, aes(y = p_25), linetype = 3) +
+        geom_line(data = df_pk_summary, aes(y = p_75), linetype = 3) +
+        geom_line(data = df_pk_summary, aes(y = p_high), linetype = 2) +
+        geom_line(data = df_pk_summary, aes(y = p_low), linetype = 2))
+
 dev.off()
 
+
+df_pk_summary <- df_pk %>% 
+  group_by(time, type) %>% 
+  summarize(median = median(conc), p_high = quantile(conc, 0.975), 
+            p_low = quantile(conc, 0.025), p_25 = quantile(conc, 0.25), 
+            p_75 = quantile(conc, 0.75), max = quantile(conc, 0.99), min = quantile(conc, 0.01)) %>% ungroup() %>% 
+  mutate(Type = factor(str_to_title(type), levels = c("Observed", "Marginal", "Copula")))
+
+plot_lines_weight_full <- df_pk %>% 
+  mutate(Type = factor(str_to_title(type), levels = c("Observed", "Marginal", "Copula"))) %>% 
+  filter(id %in% 1:nrow(data_grimsley)) %>% 
+  ggplot(aes(x = time/60)) +
+  geom_line(aes(y = conc, group = id, color = wgt), alpha = 0.3) +
+  #scale_color_viridis_c(trans = "log10", option = "plasma",direction = -1) +
+  #scale_color_gradient(low = "#E4AB01", high = "#3ABAC1", trans = "log10") +
+  scale_x_continuous(name = "Time (hours)", breaks = c(0:9)*8) +
+  scale_y_continuous(name = "Concentration (mg/L)", expand = expansion(mult = c(0.01, 0.05))) +
+  labs(color = "Weight (kg)") +
+  facet_wrap(~ Type) +
+  theme_bw() + 
+  geom_line(data = df_pk_summary, aes(y = median, linetype = "Median")) +
+  geom_line(data = df_pk_summary, aes(y = p_25, linetype = "Quartiles")) +
+  geom_line(data = df_pk_summary, aes(y = p_75, linetype = "Quartiles")) +
+  geom_line(data = df_pk_summary, aes(y = p_high, linetype = "95% Quantiles")) +
+  geom_line(data = df_pk_summary, aes(y = p_low, linetype = "95% Quantiles")) +
+  scale_linetype_manual(values = c(1, 3, 2), breaks = c("Median", "Quartiles", "95% Quantiles"), name = NULL) + 
+  theme(strip.background = element_rect(fill = "white"))
+
+
+pdf("results/figures/manuscript/PK_model_assessment.pdf", width = 7, height = 4)
+#print(plot_lines_weight_full + scale_color_viridis_c(trans = "log10", option = "plasma",direction = -1))
+#print(plot_lines_weight_full + scale_color_gradient2(high = "#001158", mid ="#f46e32", low = "yellow", trans = "log10", midpoint = log10(0.3)))
+print(plot_lines_weight_full + scale_color_gradient2(high = color_palette["MVN"], mid = color_palette["Copula"], low = color_palette["Marginal"], trans = "log10", midpoint = log10(3)))
+print(plot_lines_weight_full + scale_color_gradient2(high = color_palette["Copula"], mid = color_palette["CD"], low = color_palette["Marginal"], trans = "log10", midpoint = log10(2)))
+
+print(plot_lines_weight_full + scale_color_gradient2(high = color_palette["Copula"], mid = color_palette["CD"], low = color_palette["Marginal"], trans = "log10", midpoint = log10(1)))
+print(plot_lines_weight_full + scale_color_gradient2(high = color_palette["MVN"], mid = color_palette["Marginal"], low = color_palette["CD"], trans = "log10", midpoint = log10(3)))
+
+dev.off()
 
 
 pdf("results/figures/PK_simulation_covariates.pdf", width = 10, height = 10)
@@ -80,49 +128,6 @@ plot_comparison_distribution_sim_obs_generic(sim_data = sim_marg_grimsley[1:nrow
 
 
 dev.off()
-
-#combination
-plot_combination <- df_pk %>% 
-  filter(type != "observed") %>% 
-  filter(id %in% 1:nrow(data_grimsley)) %>% 
-  ggplot(aes(x = time/60, y = conc)) +
-  geom_line(aes(group = id), alpha = 0.3, color = "#3F5089") +
-  scale_x_continuous(name = "Time (hours)", breaks = c(0:9)*8) +
-  scale_y_continuous(name = "Concentration (mg/L)") +
-  
-  geom_line(data = df_pk_summary %>% filter(type == "observed") %>% select(-type), aes(y = median)) +
-  geom_line(data = df_pk_summary %>% filter(type == "observed") %>% select(-type), aes(y = p_25), linetype = 3) +
-  geom_line(data = df_pk_summary %>% filter(type == "observed") %>% select(-type), aes(y = p_75), linetype = 3) +
-  geom_line(data = df_pk_summary %>% filter(type == "observed") %>% select(-type), aes(y = max), linetype = 2) +
-  geom_line(data = df_pk_summary %>% filter(type == "observed") %>% select(-type), aes(y = min), linetype = 2) +
-  facet_wrap(~ type) +
-  theme_classic()
-
-#combination
-
-df_pk_summary <- df_pk %>% 
-  mutate(weight_strat = ifelse(wgt > median(wgt), "bigger", "smaller")) %>% 
-  group_by(time, type, weight_strat) %>% 
-  summarize(median = median(conc), p_high = quantile(conc, 0.975), 
-            p_low = quantile(conc, 0.025), p_25 = quantile(conc, 0.25), 
-            p_75 = quantile(conc, 0.75), max = max(conc), min = min(conc)) %>% ungroup()
-
-plot_combination <- df_pk %>% 
-  mutate(weight_strat = ifelse(wgt > median(wgt), "bigger", "smaller")) %>% 
-  filter(type != "observed") %>% 
-  ggplot(aes(x = time/60, y = conc)) +
-  geom_line(aes(group = id), alpha = 0.3, color = "red") +
-  scale_x_continuous(name = "Time (hours)", breaks = c(0:9)*8) +
-  scale_y_continuous(name = "Concentration (mg/L)") +
-  
-  geom_line(data = df_pk_summary %>% filter(type == "observed") %>% select(-type), aes(y = median)) +
-  geom_line(data = df_pk_summary %>% filter(type == "observed") %>% select(-type), aes(y = p_25), linetype = 3) +
-  geom_line(data = df_pk_summary %>% filter(type == "observed") %>% select(-type), aes(y = p_75), linetype = 3) +
-  geom_line(data = df_pk_summary %>% filter(type == "observed") %>% select(-type), aes(y = max), linetype = 2) +
-  geom_line(data = df_pk_summary %>% filter(type == "observed") %>% select(-type), aes(y = min), linetype = 2) +
-  facet_wrap(weight_strat ~ type) +
-  theme_classic()
-
 
 
 
@@ -171,58 +176,7 @@ AUC_df %>% filter(type != "observed") %>%
   
   theme_bw()
 
-
-
-
-
-AUC_df <- df_pk %>% 
-  group_by(id, type) %>% 
-  summarise(AUC0_24 = AUC(x = time, y = conc, from = 0, to = 24*60, 
-                          method = "trapezoid", na.rm = FALSE),
-            AUC24_48 = AUC(x = time, y = conc, from = 24*60, to = 48*60, 
-                           method = "trapezoid", na.rm = FALSE),
-            AUC48_72 = AUC(x = time, y = conc, from = 48*60, to = 72*60, 
-                           method = "trapezoid", na.rm = FALSE),
-            AUC_full = AUC(x = time, y = conc, from = 0, to = 72*60, 
-                           method = "trapezoid", na.rm = FALSE)) %>% 
-  ungroup() %>% 
-  pivot_longer(c(AUC0_24, AUC24_48, AUC48_72), names_to = "dosing_time", values_to = "AUC", names_prefix ="AUC")
-AUC_df %>% 
-  ggplot(aes(x = AUC, fill = type)) +
-  geom_density(alpha = 0.3) +
-  facet_grid(. ~ dosing_time) +
-  theme_bw()
-
-
-AUC_df %>% filter(type != "observed") %>% 
-  ggplot(aes(y = AUC, fill = type, x = dosing_time)) +
-  geom_boxplot(data = AUC_df %>% filter(type == "observed"), alpha = 1) +
-  geom_boxplot(alpha = 0.5) +
-  scale_fill_manual(values = c("#FC6257", "#00AF2A", "grey65")) +
-  facet_wrap(weight_strat ~ .) +
-  theme_bw()
-
-AUC_df %>% filter(type != "observed") %>% 
-  ggplot(aes(y = AUC_full, fill = type)) +
-  geom_boxplot(data = AUC_df %>% filter(type == "observed"), alpha = 1) +
-  geom_boxplot(alpha = 0.5) +
-  scale_fill_manual(values = c("#FC6257", "#00AF2A", "grey65")) +
-  facet_wrap(weight_strat ~ .) +
-  theme_bw()
-
-
-AUC_df %>% filter(type != "observed") %>% 
-  ggplot(aes(y = AUC, fill = type, x = dosing_time)) +
-  geom_boxplot(data = AUC_df %>% filter(type == "observed"), alpha = 1) +
-  geom_boxplot(alpha = 0.5) +
-  scale_fill_manual(values = c("#FC6257", "#00AF2A", "grey65")) +
-  facet_wrap(weight_strat ~ .) +
-  theme_bw()
-#conclusion: very similar results.
-
-
-#repeat sampling for correlation
-
+#repeat sampling for correlation AUC - BW and AUC - SCR
 df_true <- run_grimsley(n = nrow(data_grimsley), wgt = data_grimsley$BW, 
                         scr = data_grimsley$CREA, other_covariates = data_grimsley[, "age", drop = FALSE])
 AUC_observed <- df_true %>% 
@@ -235,9 +189,6 @@ true_corr <- cor(AUC_observed[, -1])[3, 1:2]
 
 copula_grimsley <- estimate_vinecopula_from_data(data_grimsley, family_set = "parametric")
 marg_grimsley <- estimate_vinecopula_from_data(data_grimsley, family_set ="indep")
-
-
-
 m <- 100
 df_corr <- NULL
 
@@ -272,7 +223,7 @@ for (b in 1:m) {
 
 
 #write.csv(df_corr, file = "results/PK_AUC_correlations.csv", row.names = FALSE)
-
+df_corr <- read.csv("results/PK_AUC_correlations.csv")
 df_cor_true <- data.frame(correlation = true_corr, covariate = c("weight", "scr"))
 
 df_corr %>% 

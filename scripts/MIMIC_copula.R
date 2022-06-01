@@ -53,10 +53,10 @@ cors <- cor(cop_data_MIMIC, use = "pairwise.complete.obs")
 cors_df <- data.frame(row=rownames(cors)[row(cors)[upper.tri(cors)]], 
            col=colnames(cors)[col(cors)[upper.tri(cors)]], 
            corr=cors[upper.tri(cors)])
-vars_corr <- c("Albumin", "C Reactive Protein (CRP)", "Absolute Neutrophil Count", "HDL", "INR", "Prothrombin time", "Hemoglobin", "Hematocrit (serum)", "ALT", "AST")
+vars_corr <- c("Albumin", "C Reactive Protein (CRP)", "HDL", "INR", "Prothrombin time", "Hemoglobin", "Hematocrit (serum)", "ALT", "AST")
 
 
-pdf("results/MIMIC/plot_contour_32vars.pdf", width = 50, height = 50)
+pdf("results/MIMIC/plot_contour_32vars_v2.pdf", width = 20, height = 20)
 #contour(cop_mimic)
 #plot(cop_mimic, tree = 1:2, var_names = "use")
 plot_comparison_distribution_sim_obs_generic(sim_data = mimic_simulated, obs_data = cop_data_MIMIC, plot_type = "density", 
@@ -77,6 +77,16 @@ stats_both <- stats_copula %>% left_join(stats_obs %>% rename(observed = value))
   mutate(rel_error = (value - observed)/observed,
          ratio_diff = value/observed,
          abs_diff = value - observed)
+
+vars_off <- c("Brain Natiuretic Peptide (BNP)", "Total Protein", "Absolute Count - Basos", "HDL", "C Reactive Protein (CRP)", "Potassium (serum)", "Hematocrit (serum)")
+
+
+pdf("results/MIMIC/plot_contour_32vars_off.pdf", width = 15, height = 15)
+#contour(cop_mimic)
+#plot(cop_mimic, tree = 1:2, var_names = "use")
+plot_comparison_distribution_sim_obs_generic(sim_data = mimic_simulated, obs_data = cop_data_MIMIC, plot_type = "density", 
+                                             variables = vars_off)
+dev.off()
 
 
 stats_both %>% filter(statistic == "covariance") %>% 
@@ -121,6 +131,11 @@ dens_plot <- cop_data_MIMIC %>%
 
 str(cop_data_MIMIC)
 
+
+
+
+
+
 #Copula on discrete data
 
 check_integer <- function(x) {
@@ -132,8 +147,10 @@ discrete_variables <- sapply(cop_data_MIMIC, check_integer)
 #load results from server
 load("results/MIMIC/copula_mimic_allvar_53kpatients_filtered_disc.Rdata")
 
-set.seed(234973580)
-mimic_simulated_large <- simulate(cop_mimic_disc, 10000)
+# set.seed(234973580)
+# mimic_simulated_large <- simulate(cop_mimic_disc, 10000)
+
+mimic_simulated_large[, discrete_variables] <- round(mimic_simulated_large[, discrete_variables])
 
 stats_copula <- get_statistics(mimic_simulated_large)
 stats_obs <- get_statistics(cop_data_MIMIC)
@@ -143,3 +160,7 @@ stats_both <- stats_copula %>% left_join(stats_obs %>% rename(observed = value))
   mutate(rel_error = (value - observed)/observed,
          ratio_diff = value/observed,
          abs_diff = value - observed)
+
+pdf("results/MIMIC/plot_contour_discr.pdf", width = 10, height = 10)
+plot_comparison_distribution_sim_obs_generic(sim_data = mimic_simulated_large, obs_data = cop_data_MIMIC, plot_type = "density", variables = c("ALT", "AST", "anchor_age", "Platelet Count"))
+dev.off()

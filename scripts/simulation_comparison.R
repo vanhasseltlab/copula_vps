@@ -40,6 +40,8 @@ data_total <- data_full %>%
 source("scripts/functions/functions.R")
 source("scripts/functions/Smania_Jonsson_MICE_simulation.R")
 source("scripts/functions/plot_distributions.R")
+color_palette <- create_colors(c("Observed", "Copula", "Marginal", "CD", "MVN"), 
+                               selected = c("grey", "turquoise", "dark yellow", "pink", "dark green"))
 
 ##### - Simulations - #####
 # Simulation settings
@@ -60,7 +62,7 @@ if (simulation_type == "full_data") {
 
 #other options
 n_sim <- nrow(data_test)
-m <- 30
+m <- 100
 n_statistics <- ncol(data_clean)*5  + choose(ncol(data_clean), 2)
 seed_nr <- 794594
 
@@ -68,6 +70,8 @@ seed_nr <- 794594
 
 # Statistics for observed distribution (truth)
 obs_results <- get_statistics(data_test, columns = c("age", "BW", "CREA"))
+
+write.csv(obs_results, file = paste0("results/comparison/obs_results_", simulation_type, ".csv"), row.names = F)
 
 #### - Copulas I: parametric - ####
 # Fit distribution
@@ -246,40 +250,46 @@ all_sim <- sim_copula_III %>%
 write.csv(all_sim, file = paste0("results/comparison/simulated_values_", simulation_type, ".csv"), row.names = F)
 
 results_plot <-  all_statistics %>% 
-  filter(statistic %in% c("mean", "median", "sd") | covariate == "all") %>% 
-  ggplot(aes(y = value, x = type, color = covariate)) +
+  filter(statistic %in% c("mean", "median", "sd", "covariance")) %>% 
+  ggplot(aes(y = value, x = statistic, fill = type)) +
   geom_boxplot() +
   geom_hline(data = obs_results %>% mutate(type = "observed") %>% 
-               filter(statistic %in% c("mean", "median", "sd") | covariate == "all") , 
+               filter(statistic %in% c("mean", "median", "sd", "covariance")) , 
              aes(yintercept = value, linetype = type)) +
+
+  scale_fill_manual(values = create_colors(c("copula_III", "marginal_II", "multivariate normal", "conditional distribution"), 
+                                           c("turquoise", "dark yellow", "dark green", "pink"))) +
   scale_x_discrete(guide = guide_axis(angle = 90)) +
-  facet_wrap(statistic ~ covariate , scales = "free_y", nrow = 3, dir = "v") +
+  facet_wrap( ~ covariate , scales = "free", nrow = 2, dir = "v") +
   scale_linetype_manual(values = 2, name = NULL) +
   theme_bw()
 
+
 results_plot_relative <- all_statistics %>% 
-  filter(statistic %in% c("mean", "median", "sd") | covariate == "all") %>% 
+  filter(statistic %in% c("mean", "median", "sd", "covariance")) %>% 
   left_join(obs_results %>% rename(observed = value)) %>% 
   mutate(rel_value = (value - observed)/observed) %>% 
-  ggplot(aes(y = rel_value, x = type, color = covariate)) +
+  ggplot(aes(y = rel_value, x = covariate, fill = type)) +
   geom_boxplot() +
   geom_hline(yintercept = c(-0.2, 0.2), linetype = 2, color = "grey65") +
-  geom_hline(yintercept = 0, linetype = 2, color = "black") +
+  geom_hline(yintercept = 0, linetype = 1, color = "black") +
+  scale_fill_manual(values = create_colors(c("copula_III", "marginal_II", "multivariate normal", "conditional distribution"), 
+                                           c("turquoise", "dark yellow", "dark green", "pink"))) +
   scale_x_discrete(guide = guide_axis(angle = 90)) +
-  facet_wrap(statistic ~ covariate , scales = "free_y", nrow = 3, dir = "v") +
+  facet_wrap(statistic ~ . , scales = "free", nrow = 2, dir = "v") +
   theme_bw()
 
 pdf(paste0("results/figures/simulation_statistics_", simulation_type,".pdf"), height = 7, width = 10)
 print(results_plot)
 print(results_plot_relative)
 plot_comparison_distribution_sim_obs_generic(sim_cd, data_test, sim_nr = 2, variables = c("age", "BW", "CREA"), 
-                                     plot_type = "both", title = "Conditional Distributions")
+                                     plot_type = "both", title = "Conditional Distributions", pick_color = color_palette[c("CD", "Observed")])
 plot_comparison_distribution_sim_obs_generic(sim_copula_III, data_test, sim_nr = 2,  variables = c("age", "BW", "CREA"), 
-                                     plot_type = "both", title = "Copula III")
+                                     plot_type = "both", title = "Copula", pick_color = color_palette[c("Copula", "Observed")])
 plot_comparison_distribution_sim_obs_generic(sim_mvnorm, data_test, sim_nr = 2,  variables = c("age", "BW", "CREA"), 
-                                     plot_type = "both", title = "Multivariate normal")
+                                     plot_type = "both", title = "Multivariate normal", pick_color = color_palette[c("MVN", "Observed")])
 plot_comparison_distribution_sim_obs_generic(sim_marginal, data_test, sim_nr = 2,  variables = c("age", "BW", "CREA"), 
-                                     plot_type = "both", title = "Marginal")
+                                     plot_type = "both", title = "Marginal", pick_color = color_palette[c("Marginal", "Observed")])
 dev.off()
 
 bias_variance <- all_statistics %>% 
@@ -290,15 +300,17 @@ bias_variance <- all_statistics %>%
             .groups = "keep") %>% 
   ungroup()
 
-colors_sim <- c("#D41212", "#2E9BFB", "#1C69AD", "#E2943C", "#B16919", "#73BB2D")
+colors_sim <- create_colors(c("copula_III", "marginal_II", "multivariate normal", "conditional distribution"), 
+                            c("turquoise", "dark yellow", "dark green", "pink"))
 
 bias_variance_plot <- bias_variance %>% 
-  filter(statistic %in% c("mean", "median", "sd") | covariate == "all") %>% 
+  filter(statistic %in% c("mean", "median", "sd", "covariance")) %>% 
+  filter(type != "marginal_II") %>% 
   ggplot(aes(y = rBias, x = rRMSE, color = type, shape = type)) +
   geom_vline(xintercept = 0, linetype = 2, color = "grey65") +
   geom_hline(yintercept = 0, linetype = 2, color = "grey65") +
   geom_point() +
-  scale_color_manual(values = colors_sim) +
+  scale_color_manual(values = colors_sim[order(names(colors_sim))]) +
   facet_wrap(statistic ~ covariate, nrow = 3, dir = "v") +
   theme_bw()
 
@@ -306,3 +318,70 @@ pdf(paste0("results/figures/simulation_statistics_bias_var_", simulation_type,".
 print(bias_variance_plot)
 dev.off()
 
+
+#More viz
+all_statistics <- read.csv("results/comparison/results_full_data.csv")
+all_statistics_rs <- read.csv("results/comparison/results_random_split.csv")
+
+obs_results <- read.csv("results/comparison/obs_results_full_data.csv")
+obs_results_rs <- read.csv("results/comparison/obs_results_random_split.csv")
+
+
+all_stats <- rbind.data.frame(all_statistics %>% mutate(data = "Full data"),
+                              all_statistics_rs %>% mutate(data = "Random split"))
+
+obs <- rbind.data.frame(obs_results %>% mutate(data = "Full data"),
+                        obs_results_rs %>% mutate(data = "Random split"))
+
+simulation_performance <- all_stats %>% 
+  filter(statistic %in% c("mean", "covariance", "sd")) %>% 
+  mutate(key = paste(statistic, covariate, sep = "_")) %>% 
+  left_join(obs %>% rename(observed = value)) %>% 
+  mutate(rel_value = (value - observed)/observed) %>% 
+  mutate(diff_ratio = value/observed) %>% 
+  
+  filter(data == "Full data") %>% 
+  
+  ggplot(aes(y = diff_ratio, x = key, fill = type)) +
+  geom_boxplot() +
+  geom_hline(yintercept = c(1 - 0.2, 1 + 0.2), linetype = 2, color = "grey65") +
+  geom_hline(yintercept = 1, linetype = 1, color = "black") +
+  scale_x_discrete(guide = guide_axis(angle = 90)) +
+  scale_y_continuous(limits = c(NA, 3)) +
+ # facet_wrap( ~ data, scales = "free_x", nrow = 2) +
+  labs(x = NULL, y = "Relative error (simulated/observed)") +
+  scale_fill_manual(values = create_colors(c("copula_III", "marginal_II", "multivariate normal", "conditional distribution"), 
+                                           c("turquoise", "dark yellow", "dark green", "pink"))) +
+  theme_bw()
+
+pdf("results/figures/simulation_performance_3vars.pdf", height = 5, width = 6)
+print(simulation_performance)
+dev.off()
+
+results_plot_relative <- all_statistics %>% 
+  filter(statistic %in% c("mean", "median", "sd", "covariance")) %>% 
+  left_join(obs_results %>% rename(observed = value)) %>% 
+  mutate(rel_value = (value - observed)/observed) %>% 
+  ggplot(aes(y = rel_value, x = covariate, fill = type)) +
+  geom_boxplot() +
+  geom_hline(yintercept = c(-0.2, 0.2), linetype = 2, color = "grey65") +
+  geom_hline(yintercept = 0, linetype = 1, color = "black") +
+  scale_x_discrete(guide = guide_axis(angle = 90)) +
+  facet_wrap(statistic ~ . , scales = "free", nrow = 2, dir = "v") +
+  theme_bw()
+
+all_stats %>% 
+  filter(statistic %in% c("mean", "covariance", "sd")) %>% 
+  mutate(key = paste(statistic, covariate, sep = "_")) %>% 
+  left_join(obs %>% rename(observed = value)) %>% 
+  mutate(rel_value = (value - observed)/observed) %>% 
+  mutate(diff_ratio = value/observed) %>% 
+  group_by(key, type, data) %>% 
+  summarize(rel_value  = mean(rel_value), diff_ratio = mean(diff_ratio)) %>%  ungroup() %>% 
+  ggplot(aes(y = diff_ratio, x = key, color = type)) +
+  geom_point(aes(shape = type)) +
+  geom_hline(yintercept = c(1 - 0.2, 1 + 0.2), linetype = 2, color = "grey65") +
+  geom_hline(yintercept = 1, linetype = 1, color = "black") +
+  scale_x_discrete(guide = guide_axis(angle = 90)) +
+  facet_wrap( ~ data, scales = "free_x", nrow = 2) +
+  theme_bw()
