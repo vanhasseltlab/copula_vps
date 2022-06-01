@@ -8,7 +8,7 @@ plot_comparison_distribution_sim_obs_generic <- function(sim_data, obs_data, var
     bind_rows(sim_data %>% mutate(type = "simulated"))
   
   total_data$type <- factor(total_data$type, levels = c("simulated", "observed"))
-  
+  names(pick_color) <- NULL
   if ("simulation_nr" %in% colnames(sim_data)) {
     # Use only 1 simulation for plotting
     total_data <- total_data %>%
@@ -64,7 +64,9 @@ plot_comparison_distribution_sim_obs_generic <- function(sim_data, obs_data, var
   } else if (plot_type == "density") {
     list_plots <- c(density_plots, univariate_plots)
   } else if (plot_type == "both") {
-    layout_mat[upper.tri(layout_mat)] <- nr_cross_plots + length(variables) + (1:nr_cross_plots)
+    t_layout_mat <- t(layout_mat)
+    t_layout_mat[lower.tri(t_layout_mat)] <- nr_cross_plots + length(variables) + (1:nr_cross_plots)
+    layout_mat <- t(t_layout_mat)
     list_plots <- c(density_plots, univariate_plots, point_plots)
   }
   

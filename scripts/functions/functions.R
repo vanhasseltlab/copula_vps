@@ -90,3 +90,20 @@ check_fit_plot <- function(x, marg_density) {
   hist(x, probability = TRUE, breaks = 30)
   lines(x_dens, marg_density(x_dens), col = "red", lwd = 2)
 }
+
+
+#create color data frame
+create_colors <- function(labels, selected = 1:length(labels)) {
+  colors <- c("#F3D4DF", "#E7AAC0", "#DB7FA1", "#CF5581", "#C32A62", "#B70043", "#1784E4", 
+              "#1784E4", "#E4AB01", "#04715F", "#B52807", "#C3C3C3", "#3ABAC1", "#C37121", 
+              "#26B72C", "#8DD2FF", "#9DF7A1", "#F7F18B", "#F3A492", "#083A9C", "#DB7FA1",
+              "#001158", "#f46e32", "#969696")
+  names(colors) <- c("grey pink", "light pink", "midlight pink", "mid pink", "middark pink", 
+                     "dark pink", "midlight blue", "blue", "dark yellow", "dark green", "red", 
+                     "light grey", "turquoise", "brown", "green", "light blue", "light green", 
+                     "yellow", "peach", "dark blue", "pink", "leiden blue", "leiden orange", "grey")
+  color_palette <- colors[selected]
+  names(color_palette) <- labels[1:length(selected)]
+  return(color_palette)
+}
+

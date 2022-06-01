@@ -6,6 +6,18 @@ library(rvinecopulib)
 estimate_vinecopula_from_data <- function(dat, variables_of_interest = NULL, 
                                           polynomial = FALSE, ID_name = NULL, 
                                           time_name = NULL, keep_data = FALSE, ...) {
+  estimate_spline_marginal <- function(covariate, xmin = NaN) {
+    covariate <- covariate[!is.na(covariate)]
+    param <- kde1d(covariate, xmin = xmin)
+    marg <- list(pdf = function(u) qkde1d(u, param),
+                 pit = function(x) pkde1d(x, param),
+                 rdist = function(n) rkde1d(n, param),
+                 density = function(x) dkde1d(x, param),
+                 dist = param)
+    return(marg)
+  }
+  
+  
   
   if(is.null(variables_of_interest)) {
     #create set of variables between which the copula is made
@@ -45,6 +57,24 @@ estimate_vinecopula_from_data <- function(dat, variables_of_interest = NULL,
     ind_na <- is.na(dat_unif[, variable])
     dat_unif[!ind_na, variable] <- marginals[[variable]]$pit(dat_unif[!ind_na, variable])
   }
+
+  #Account for discrete variables
+  if (hasArg(var_types)) {
+    arg_list <- list(...)
+    var_types <- arg_list[["var_types"]]
+    rm(arg_list)
+    if (any("d" %in% var_types)) {
+      discrete_vars <- names(dat_out[var_types == "d"])
+      discrete_data <- dat_out[, discrete_vars, drop = F]
+      for (variable in discrete_vars) {
+        ind_na <- is.na(dat_out[, variable])
+        discrete_data[!ind_na, variable] <- marginals[[variable]]$pit(dat_out[!ind_na, variable] - 1)
+      }
+      names(discrete_data) <- paste0(names(discrete_data), "_d")
+      dat_unif <- cbind.data.frame(dat_unif, discrete_data)
+    }
+  }
+  
   
   print("End marginal estimation")
   print("Start copula estimation")
@@ -86,7 +116,7 @@ simulate.estVineCopula <- function(vine_output, n, value_only = TRUE) {
   
   #Simulation
   if (any(vine_output$vine_copula$var_types == "d")) {
-    vine_distribution <- vinecop_dist(vine_output$vine_copula$pair_copulas, vine_output$vine_copula$structure, var_types =  vine_output$vine_copula$var_types)
+    vine_distribution <- vinecop_dist(vine_output$vine_copula$pair_copulas, vine_output$vine_copula$structure, var_types = vine_output$vine_copula$var_types)
     dat_sim <- as.data.frame(rvinecop(n, vine_distribution))
     names(dat_sim) <- vine_output$variables_of_interest[1:ncol(dat_sim)]
   } else {
@@ -98,6 +128,9 @@ simulate.estVineCopula <- function(vine_output, n, value_only = TRUE) {
   for (variable in names(dat_sim)) {
     ind_na <- is.na(dat_sim[, variable])
     dat_sim[!ind_na, variable] <- vine_output$marginals[[variable]]$pdf(dat_sim[!ind_na, variable])
+  }
+  if (any(vine_output$vine_copula$var_types == "d")) {
+    dat_sim[, vine_output$vine_copula$var_types == "d"] <- round(dat_sim[, vine_output$vine_copula$var_types == "d"])
   }
   
   #polynomials
