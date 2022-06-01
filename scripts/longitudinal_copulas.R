@@ -1,10 +1,7 @@
 #Longitudinal analysis
-library(fitdistrplus)
 library(tidyverse)
 library(rvinecopulib)
-library(actuar)
 library(EnvStats)
-library(mvtnorm)
 library(kde1d)
 library(lme4)
 select <- dplyr::select
@@ -12,57 +9,33 @@ select <- dplyr::select
 source("scripts/functions/functions.R")
 source("scripts/functions/plot_distributions.R")
 source("scripts/functions/estimate_vinecopula_from_data.R")
-#read in pregnancy data
-data_pregnancy_raw <- read.csv("data/Jig - pregnancy file August 2012 minus coag info.csv", 
-                               row.names = NULL, na.strings = c("")) %>% 
-  mutate(Neutrophils = as.numeric(str_replace(Neutrophils, ":", ".")))
+color_palette <- create_colors(c("Observed", "Copula", "Marginal", "CD"), 
+                               selected = c("grey", "turquoise", "dark yellow", "pink"))
 
-
-#Data preparation: Remove (most) imputed values
-data_reduced <- data_pregnancy_raw
-remove_rows <- numeric()
-index_gest <- c(grep("gest", colnames(data_reduced)), grep("dat1", colnames(data_reduced)))
-previous_meas <- as.character(data_reduced[1, -index_gest])
-previous_meas[is.na(previous_meas)] <- "-999"
-for (i in 2:nrow(data_reduced)) {
-  current_meas <- as.character(data_reduced[i, -index_gest])
-  current_meas[is.na(current_meas)] <- "-999"
-  if (all(current_meas == previous_meas)) {
-    remove_rows <- c(remove_rows, i)
-  }
-  previous_meas <- current_meas
-}
-data_reduced <- data_reduced[-remove_rows, ]
-
-write.csv(data_reduced, file = "data/clean/pregnancy_reduced.csv", row.names = FALSE,
-          quote = FALSE)
-
-###
-#continue with data_reduced
+#### Data ####
+#data_reduced from data_preparation_pregnancy.R
 data_reduced <- read.csv("data/clean/pregnancy_reduced.csv", row.names = NULL)
-
-### Using polynomials
 #remove all observations with baby (only looking at pregnancy)
 data_clean <- data_reduced %>% 
   filter(BABY == 0)
 
-
-#Polynomials for multiple variables
+##### Estimate polynomials and fit copula ####
 variables_of_interest <- c("Platelets", "SCr", "Albumin", "Bilirubin", "Lymphocytes", "Neutrophils")
 copula_long <- estimate_vinecopula_from_data(data_clean, polynomial = TRUE, ID_name = "ID", time_name = "gest",
                                              variables_of_interest = variables_of_interest, family_set = "parametric", keep_data = TRUE)
 set.seed(68924730)
 df_sim <- simulate(copula_long, n = length(unique(data_clean$ID)), value_only = FALSE)
 
-plot(copula_long, var_names = "use", tree = 1:2)
-pdf("results/figures/longitudinal_parameter_copula.pdf", width = 20, height = 20)
-contour(copula_long)
-pairs_copula_data(copula_long$uniform_data)
-plot_comparison_distribution_sim_obs_generic(sim_data = df_sim$parameters, obs_data = copula_long$original_data, plot_type = "both")
-dev.off()
 
+#### Marginal distributions ####
+#check marginal profiles
+marginal_long <- estimate_vinecopula_from_data(data_clean, polynomial = TRUE, ID_name = "ID", time_name = "gest",
+                                               variables_of_interest = variables_of_interest, family_set = "indep")
+set.seed(68924730)
+df_sim_marg <- simulate(marginal_long, n = length(unique(data_clean$ID)), value_only = TRUE)
 
-#transform estimated parameters of observed population to time curves-> df_poly
+#### Create observed curves from polynomial estimation ####
+# transform estimated parameters of observed population to time curves
 gest_times <- seq(min(data_clean$gest), max(data_clean$gest), by = 1/7)
 df_poly <- copula_long$original_data %>% 
   rownames_to_column("ID") %>%
@@ -72,7 +45,32 @@ for (variable in variables_of_interest) {
   df_poly[, variable] <- df_poly[, col_ind[1]] + df_poly[, col_ind[2]]*df_poly$gest + df_poly[, col_ind[3]]*df_poly$gest^2
 }
 
-#Plotting results
+#### #Combine results Copula and marginal ####
+df_long <- df_sim_marg %>% 
+  mutate(type = "Marginal") %>% 
+  bind_rows(df_poly %>% select(which(!grepl("b\\d_", names(df_poly)))) %>% mutate(type = "Observed")) %>% 
+  bind_rows(df_sim$values %>% mutate(type = "Copula")) %>% 
+  pivot_longer(-c(ID, gest, type), names_to = "biomarker", values_to = "conc")
+
+df_long_summary <- df_long %>% 
+  group_by(gest, type, biomarker) %>% 
+  summarize(median = median(conc), p_high = quantile(conc, 0.975), 
+            p_low = quantile(conc, 0.025), p_25 = quantile(conc, 0.25), 
+            p_75 = quantile(conc, 0.75), max = max(conc), min = min(conc)) %>% ungroup()
+
+#### Performance on parameter scale ####
+obs_statistics <- get_statistics(copula_long$original_data)
+large_sim <-  simulate(copula_long, n = 5000, value_only = FALSE)$parameters
+large_sim_statistics <- get_statistics(large_sim)
+
+sim_error <- large_sim_statistics %>%   
+  left_join(obs_statistics %>% rename(observed = value)) %>% 
+  mutate(rel_error = (value - observed)/observed,
+         ratio_diff = value/observed,
+         abs_diff = value - observed) %>% 
+  mutate(stat = ifelse(covariate == "all", "cov", statistic))
+
+####Visualization####
 #observed data
 plot_explore <- data_clean %>% 
   select(all_of(c("ID", "gest", variables_of_interest))) %>% 
@@ -83,40 +81,16 @@ plot_explore <- data_clean %>%
   facet_wrap(~ variable, ncol = 1, scales = "free_y", strip.position = "right") + 
   theme_bw()
 
-#side-by-side comparison of the estimated and simulated curves
-df_comparing_sim_org <- df_sim$values %>% 
-  mutate(type = "Simulated") %>% 
-  bind_rows(df_poly %>% mutate(type = "Observed")) %>% 
-  dplyr::select(all_of(c("ID", "gest", variables_of_interest, "type"))) %>% 
-  pivot_longer(-c(ID, gest, type), names_to = "variable") %>% 
-  ggplot(aes(x = gest, y = value)) +
-  geom_line(aes(group = as.factor(ID)), color = "grey15", alpha = 0.5) +
-  geom_smooth(color = "red", se = F) +
-  labs(y = NULL, x = "Gestational age (weeks)") +
-  facet_grid(variable ~ type, scales = "free_y", switch = "y") + 
-  theme_bw() +
-  theme(strip.placement = "outside")
-
-pdf("results/figures/longitudinal_polynomials.pdf", width = 6, height = 9)
-print(df_comparing_sim_org)
+#visualize copula
+pdf("results/figures/longitudinal_parameter_copula.pdf", width = 20, height = 20)
+contour(copula_long)
+pairs_copula_data(copula_long$uniform_data)
+plot_comparison_distribution_sim_obs_generic(sim_data = df_sim$parameters, obs_data = copula_long$original_data, plot_type = "both")
 dev.off()
 
-###
-#performance on parameter scale
-obs_statistics <- get_statistics(copula_long$original_data)
-large_sim <-  simulate(copula_long, n = 5000, value_only = FALSE)$parameters
 
 
-large_sim_statistics <- get_statistics(large_sim)
-
-sim_error <- large_sim_statistics %>%   
-  left_join(obs_statistics %>% rename(observed = value)) %>% 
-  mutate(rel_error = (value - observed)/observed,
-         ratio_diff = value/observed,
-         abs_diff = value - observed) %>% 
-  mutate(stat = ifelse(covariate == "all", "cov", statistic))
-
-
+#performance
 sim_error %>% 
   ggplot(aes(x = stat, y = ratio_diff)) +
   geom_boxplot() +
@@ -131,37 +105,7 @@ sim_error %>% group_by(stat) %>%
 
 
 
-#check weird marginal profiles
-marginal_long <- estimate_vinecopula_from_data(data_clean, polynomial = TRUE, ID_name = "ID", time_name = "gest",
-                                             variables_of_interest = variables_of_interest, family_set = "indep")
-set.seed(68924730)
-df_sim_marg <- simulate(marginal_long, n = length(unique(data_clean$ID)), value_only = TRUE)
 
-df_comparing_sim_org_marg <- df_sim_marg %>% 
-  mutate(type = "Marginal") %>% 
-  bind_rows(df_poly %>% mutate(type = "Observed")) %>% 
-  bind_rows(df_sim$values %>% mutate(type = "Copula")) %>% 
-  dplyr::select(all_of(c("ID", "gest", variables_of_interest, "type"))) %>% 
-  pivot_longer(-c(ID, gest, type), names_to = "variable") %>% 
-  ggplot(aes(x = gest, y = value)) +
-  geom_line(aes(group = as.factor(ID)), color = "grey15", alpha = 0.5) +
-  geom_smooth(color = "red", se = F) +
-  labs(y = NULL, x = "Gestational age (weeks)") +
-  facet_grid(variable ~ type, scales = "free_y", switch = "y") + 
-  theme_bw() +
-  theme(strip.placement = "outside")
-
-
-
-df_long_summary <- df_sim_marg %>% 
-  mutate(type = "Marginal") %>% 
-  bind_rows(df_poly %>% select(which(!grepl("b\\d_", names(df_poly)))) %>% mutate(type = "Observed")) %>% 
-  bind_rows(df_sim$values %>% mutate(type = "Copula")) %>% 
-  pivot_longer(-c(ID, gest, type), names_to = "biomarker", values_to = "conc") %>% 
-  group_by(gest, type, biomarker) %>% 
-  summarize(median = median(conc), p_high = quantile(conc, 0.975), 
-            p_low = quantile(conc, 0.025), p_25 = quantile(conc, 0.25), 
-            p_75 = quantile(conc, 0.75), max = max(conc), min = min(conc)) %>% ungroup()
 
 plot_df_long_summary <- df_long_summary %>% 
   ggplot(aes(x = gest, fill = type)) +
@@ -184,7 +128,6 @@ plot_combination_long <-  df_sim_marg %>%
   geom_line(aes(group = ID), alpha = 0.3, color = "red") +
   scale_x_continuous(name = "Time (hours)", breaks = c(0:9)*8) +
   scale_y_continuous(name = "Concentration (mg/L)") +
-  
   geom_line(data = df_long_summary %>% filter(type == "Observed") %>% select(-type), aes(y = median)) +
   geom_line(data = df_long_summary %>% filter(type == "Observed") %>% select(-type), aes(y = p_25), linetype = 3) +
   geom_line(data = df_long_summary %>% filter(type == "Observed") %>% select(-type), aes(y = p_75), linetype = 3) +
@@ -212,7 +155,7 @@ AUC_df_long %>% filter(type != "Observed") %>%
   ggplot(aes(y = AUC, fill = type, x = biomarker)) +
   geom_boxplot(data = AUC_df_long %>% filter(type == "Observed"), alpha = 1) +
   geom_boxplot(alpha = 0.5) +
-  scale_fill_manual(values = c("#FC6257", "#00AF2A", "grey65")) +
+  scale_fill_manual(values = color_palette, limits = force) +
   facet_wrap(~ biomarker, scales = "free", nrow = 1) +
   theme_bw()
 
@@ -242,7 +185,7 @@ AUC_df_long %>% group_by(type, biomarker) %>%
   geom_boxplot(data = AUC_df_long %>% group_by(type, biomarker) %>% 
                  summarize(median_AUC = median(AUC), sd_AUC = sd(AUC)/median(AUC)) %>% ungroup() %>% filter(type == "Observed"), alpha = 1) +
   geom_boxplot(alpha = 0.5) +
-  scale_fill_manual(values = c("#FC6257", "#00AF2A", "grey65")) +
+  scale_colour_manual(values = color_palette) +
   facet_wrap(~ biomarker, scales = "free_x", nrow = 1) +
   theme_bw()
 
@@ -274,6 +217,52 @@ plot_df_long_summary <- df_long_summary %>%
   theme_classic()
 
 
+#New colors
+plot_df_long_summary <- df_long_summary %>% 
+  ggplot(aes(x = gest, fill = type)) +
+  geom_ribbon(aes(ymin = p_low, ymax = p_high), alpha = 0.7) +
+  geom_line(aes(y = median, linetype = "Median")) +
+  geom_line(aes(y = p_25, linetype = "Quartiles")) +
+  geom_line(aes(y = p_75, linetype = "Quartiles")) +
+  geom_line(aes(y = p_high, linetype = "95% Quantiles")) +
+  geom_line(aes(y = p_low, linetype = "95% Quantiles")) +
+  scale_linetype_manual(values = c(1, 3, 2), breaks = c("Median", "Quartiles", "95% Quantiles"), name = NULL) + 
+  
+  scale_fill_manual(values = color_palette, limits = force) +
+  scale_x_continuous(name = "Time (hours)", breaks = c(0:9)*8) +
+  scale_y_continuous(name = "Concentration (mg/L)", expand = expansion(mult = c(0.01, 0.05))) +
+  facet_grid(biomarker ~ type, scales = "free_y") +
+  theme_bw() +
+  theme(strip.background = element_rect(fill = "white"))
+
+#New colors separate lines
+long_all <- df_sim_marg %>% 
+  mutate(type = "Marginal") %>% 
+  bind_rows(df_poly %>% select(which(!grepl("b\\d_", names(df_poly)))) %>% mutate(type = "Observed")) %>% 
+  bind_rows(df_sim$values %>% mutate(type = "Copula")) %>% 
+  pivot_longer(-c(ID, gest, type), names_to = "biomarker", values_to = "conc")
+
+
+plot_df_long_summary_lines <- df_long_summary %>% 
+  ggplot(aes(x = gest)) +
+  geom_line(data = long_all, aes(y = conc, group = ID, color = type), alpha = 0.7) +
+  geom_line(aes(y = median, linetype = "Median")) +
+  geom_line(aes(y = p_25, linetype = "Quartiles")) +
+  geom_line(aes(y = p_75, linetype = "Quartiles")) +
+  geom_line(aes(y = p_high, linetype = "95% Quantiles")) +
+  geom_line(aes(y = p_low, linetype = "95% Quantiles")) +
+  scale_linetype_manual(values = c(1, 3, 2), breaks = c("Median", "Quartiles", "95% Quantiles"), name = NULL) + 
+  
+  scale_color_manual(values = color_palette, limits = force) +
+  scale_x_continuous(name = "Time (hours)", breaks = c(0:9)*8) +
+  scale_y_continuous(name = "Concentration (mg/L)", expand = expansion(mult = c(0.01, 0.05))) +
+  facet_grid(biomarker ~ type, scales = "free_y") +
+  theme_bw() +
+  theme(strip.background = element_rect(fill = "white"))
+
+pdf("results/figures/longitudinal_comparison_lines.pdf", height = 8, width = 6)
+print(plot_df_long_summary_lines)
+dev.off()
 
 
 ####### Summary metrics AUC bigger simulation #########
@@ -313,3 +302,27 @@ AUC_IQR %>% ggplot(aes(x = type, y = ratio_diff, color = biomarker, group = biom
 AUC_IQR %>% group_by(type) %>% 
   summarize(mean_spread = mean(ratio_diff))
 
+AUC_summary %>% ggplot(aes(x = type, y = IQR, color = biomarker, group = biomarker)) +
+  geom_point() +
+  geom_line() +
+  geom_hline(yintercept = 0, linetype = 2) +
+  labs(y = "SD") +
+  theme_bw()
+
+
+
+#Cummulative AUC
+
+#AUCs
+AUC_df_cumu <- large_sim_marg$values %>% 
+  mutate(type = "Marginal") %>% 
+  bind_rows(df_poly %>% select(which(!grepl("b\\d_", names(df_poly)))) %>% mutate(type = "Observed")) %>% 
+  bind_rows(large_sim_cop$values %>% mutate(type = "Copula")) %>% 
+  pivot_longer(-c(ID, gest, type), names_to = "biomarker", values_to = "conc") %>% 
+  group_by(ID, type, biomarker) %>% 
+  arrange(gest) %>% 
+  mutate(cumulative_AUC = cumsum(conc)) %>% 
+  ungroup()
+
+
+AUC_df_cumu
