@@ -2,7 +2,7 @@
 
 plot_comparison_distribution_sim_obs_generic <- function(sim_data, obs_data, variables = NULL, 
                                                          sim_nr = 1, title = NULL, plot_type = "points", 
-                                                         pick_color = c("#F46E32", "#5063B9")) {
+                                                         pick_color = c("#F46E32", "#5063B9"), full_plot = TRUE) {
   #Combine truth and simulation results
   total_data <- obs_data %>% mutate(type = "observed") %>%
     bind_rows(sim_data %>% mutate(type = "simulated"))
@@ -38,10 +38,25 @@ plot_comparison_distribution_sim_obs_generic <- function(sim_data, obs_data, var
       density_plots[[combination]] <- ggplot(mapping = aes_string(x = combination_variables[i, 1], y = combination_variables[i, 2])) +
         geom_density2d(data = part_data[part_data$type == "simulated", ], color = pick_color[1]) +
         geom_density2d(data = part_data[part_data$type == "observed", ],  alpha = 1, color = pick_color[2], linetype = 2) +
+        scale_y_continuous(expand = expansion(mult = c(0, 0))) +
+        scale_x_continuous(expand = expansion(mult = c(0, 0))) +
         theme_bw() +
         theme(legend.position = "none")
     }
   }
+  
+  if(!full_plot) {
+    if (plot_type == "density") {
+      return(density_plots)
+    }
+    if (plot_type == "points") {
+      return(point_plots)
+    }
+    else if (plot_type == "both") {
+      return(c(density_plots, point_plots))
+    }
+  }
+  
   
   univariate_plots <- list()
   for (i in variables_str) {

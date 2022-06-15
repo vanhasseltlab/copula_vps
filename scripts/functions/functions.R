@@ -93,17 +93,33 @@ check_fit_plot <- function(x, marg_density) {
 
 
 #create color data frame
-create_colors <- function(labels, selected = 1:length(labels)) {
+create_colors <- function(labels = NULL, selected = 1:length(labels)) {
   colors <- c("#F3D4DF", "#E7AAC0", "#DB7FA1", "#CF5581", "#C32A62", "#B70043", "#1784E4", 
               "#1784E4", "#E4AB01", "#04715F", "#B52807", "#C3C3C3", "#3ABAC1", "#C37121", 
               "#26B72C", "#8DD2FF", "#9DF7A1", "#F7F18B", "#F3A492", "#083A9C", "#DB7FA1",
-              "#001158", "#f46e32", "#969696")
+              "#001158", "#f46e32", "#969696", "#F46E32", "black")
   names(colors) <- c("grey pink", "light pink", "midlight pink", "mid pink", "middark pink", 
                      "dark pink", "midlight blue", "blue", "dark yellow", "dark green", "red", 
                      "light grey", "turquoise", "brown", "green", "light blue", "light green", 
-                     "yellow", "peach", "dark blue", "pink", "leiden blue", "leiden orange", "grey")
+                     "yellow", "peach", "dark blue", "pink", "leiden blue", "leiden orange", "grey", "orange", "black")
   color_palette <- colors[selected]
-  names(color_palette) <- labels[1:length(selected)]
+  if (!is.null(labels)) {
+    names(color_palette) <- labels[1:length(selected)]
+  }
   return(color_palette)
+  
+  
+  demo_colors <- function(color_df, blocks) {
+    color_plot <- color_df %>% 
+      mutate(x_demo = rep(1:blocks[1], each = blocks[2]),
+             y_demo = rep(1:blocks[2], times = blocks[1])) %>% 
+      ggplot(aes(x = x_demo, y = y_demo)) +
+      geom_tile(aes(fill = color)) +
+      scale_fill_identity() +
+      geom_text(aes(label = color, color = font.color)) +
+      scale_color_identity() +
+      theme_void()
+    return(color_plot)
+  }
 }
 
