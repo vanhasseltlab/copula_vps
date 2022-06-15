@@ -6,6 +6,7 @@ source("scripts/functions/estimate_vinecopula_from_data.R")
 source("scripts/functions/functions.R")
 source("scripts/functions/run_Grimsley.R")
 source("scripts/functions/plot_distributions.R")
+source("scripts/functions/Smania_Jonsson_MICE_simulation.R")
 color_palette <- create_colors(c("Observed", "Copula", "Marginal", "CD", "MVN"), 
                                selected = c("grey", "turquoise", "dark yellow", "pink", "dark green"))
 
@@ -22,6 +23,9 @@ sim_cop_grimsley <- simulate(copula_grimsley, n = nrow(data_grimsley))
 marg_grimsley <- estimate_vinecopula_from_data(data_grimsley, family_set ="indep")
 sim_marg_grimsley <- simulate(marg_grimsley, n =  nrow(data_grimsley))
 
+#cd
+sim_cd_grimsley <- simCovMICE(m = 1, data_grimsley, catCovs = NULL) %>% select(-NSIM)
+
 # run ODE model (solve for simulated patients)
 df_true <- run_grimsley(n = nrow(data_grimsley), wgt = data_grimsley$BW, 
                         scr = data_grimsley$CREA, other_covariates = data_grimsley[, "age", drop = FALSE])
@@ -29,8 +33,11 @@ df_copula <- run_grimsley(n = nrow(sim_cop_grimsley), wgt = sim_cop_grimsley$BW,
                           scr = sim_cop_grimsley$CREA, other_covariates = sim_cop_grimsley[, "age", drop = FALSE])
 df_marg <- run_grimsley(n = nrow(sim_marg_grimsley), wgt = sim_marg_grimsley$BW,
                         scr = sim_marg_grimsley$CREA, other_covariates = sim_marg_grimsley[, "age", drop = FALSE])
+df_cd <- run_grimsley(n = nrow(sim_cd_grimsley), wgt = sim_cd_grimsley$BW,
+                        scr = sim_cd_grimsley$CREA, other_covariates = sim_cd_grimsley[, "age", drop = FALSE])
 df_pk <- df_copula %>% mutate(type = "copula") %>% 
   bind_rows(df_true %>% mutate(type = "observed")) %>% 
+  bind_rows(df_cd %>% mutate(type = "conditional")) %>% 
   bind_rows(df_marg %>% mutate(type = "marginal"))
 
 # plot
@@ -85,7 +92,7 @@ df_pk_summary <- df_pk %>%
   summarize(median = median(conc), p_high = quantile(conc, 0.975), 
             p_low = quantile(conc, 0.025), p_25 = quantile(conc, 0.25), 
             p_75 = quantile(conc, 0.75), max = quantile(conc, 0.99), min = quantile(conc, 0.01)) %>% ungroup() %>% 
-  mutate(Type = factor(str_to_title(type), levels = c("Observed", "Marginal", "Copula")))
+  mutate(Type = factor(str_to_title(type), levels = c("Observed", "Marginal", "Copula", "Conditional")))
 
 plot_lines_weight_full <- df_pk %>% 
   mutate(Type = factor(str_to_title(type), levels = c("Observed", "Marginal", "Copula"))) %>% 
@@ -130,6 +137,43 @@ plot_comparison_distribution_sim_obs_generic(sim_data = sim_marg_grimsley[1:nrow
 dev.off()
 
 
+
+#Plot presentations
+plot_data <- df_pk %>% 
+  
+  filter(time/60 <= 24) %>% 
+  
+  filter(id %in% 1:nrow(data_grimsley)) %>% 
+  mutate(Type = factor(str_to_title(type), levels = c("Observed", "Marginal", "Copula", "Conditional"))) %>% 
+  mutate(Type = recode(type, marginal = "marginal\ndistribution", conditional = "conditional\ndistribution"))
+
+df_pk_summary_24 <-  df_pk_summary %>% 
+  filter(time/60 <= 24) %>% 
+  mutate(Type = recode(type, marginal = "marginal\ndistribution", conditional = "conditional\ndistribution"))
+
+plot_lines_weight_pres <- plot_data %>% 
+  ggplot(aes(x = time/60)) +
+  geom_line(aes(y = conc, group = id, color = wgt), alpha = 0.3)  +
+  scale_x_continuous(name = "Time (hours)", breaks = c(0:9)*8) +
+  scale_y_continuous(name = "Concentration (mg/L)", expand = expansion(mult = c(0.01, 0.05))) +
+  labs(color = "Weight (kg)") +
+  facet_grid(~ Type) +
+  theme_bw() + 
+  geom_line(data = df_pk_summary_24, aes(y = median, linetype = "Median")) +
+  geom_line(data = df_pk_summary_24, aes(y = p_25, linetype = "Quartiles")) +
+  geom_line(data = df_pk_summary_24, aes(y = p_75, linetype = "Quartiles")) +
+  geom_line(data = df_pk_summary_24, aes(y = p_high, linetype = "95% Quantiles")) +
+  geom_line(data = df_pk_summary_24, aes(y = p_low, linetype = "95% Quantiles")) +
+  scale_linetype_manual(values = c(1, 3, 2), breaks = c("Median", "Quartiles", "95% Quantiles"), name = NULL) + 
+  theme(strip.background = element_rect(fill = "white"), strip.text = element_text(size = 10))
+
+
+pdf("presentation/figures/lines_PK_model_assessment.pdf", width = 7, height = 3.6)
+print(plot_lines_weight_pres +
+        scale_color_gradient2(low = "#f46e32", high = "#001158", trans = "log10", mid = "#243676", midpoint = log10(7)))
+print(plot_lines_weight_pres +
+        scale_color_gradient2(low = "#F54C00", mid = "#3652B7", trans = "log10", high = "#001158", midpoint = log10(5)))
+dev.off()
 
 #AUC comparison
 

@@ -9,7 +9,7 @@ select <- dplyr::select
 source("scripts/functions/functions.R")
 source("scripts/functions/plot_distributions.R")
 source("scripts/functions/estimate_vinecopula_from_data.R")
-color_palette <- create_colors(c("Observed", "Copula", "Marginal", "CD"), 
+color_palette <- create_colors(c("observed", "copula", "marginal\ndistribution", "conditional\ndistribution"), 
                                selected = c("grey", "turquoise", "dark yellow", "pink"))
 
 #### Data ####
@@ -47,9 +47,9 @@ for (variable in variables_of_interest) {
 
 #### #Combine results Copula and marginal ####
 df_long <- df_sim_marg %>% 
-  mutate(type = "Marginal") %>% 
-  bind_rows(df_poly %>% select(which(!grepl("b\\d_", names(df_poly)))) %>% mutate(type = "Observed")) %>% 
-  bind_rows(df_sim$values %>% mutate(type = "Copula")) %>% 
+  mutate(type = "marginal\ndistribution") %>% 
+  bind_rows(df_poly %>% select(which(!grepl("b\\d_", names(df_poly)))) %>% mutate(type = "observed")) %>% 
+  bind_rows(df_sim$values %>% mutate(type = "copula")) %>% 
   pivot_longer(-c(ID, gest, type), names_to = "biomarker", values_to = "conc")
 
 df_long_summary <- df_long %>% 
@@ -115,10 +115,28 @@ plot_df_long_summary <- df_long_summary %>%
   geom_line(aes(y = p_high), linetype = 2) +
   geom_line(aes(y = p_low), linetype = 2) +
   geom_ribbon(aes(ymin = min, ymax = max), alpha = 0.3) +
-  scale_x_continuous(name = "Time (hours)", breaks = c(0:9)*8) +
+  scale_x_continuous(name = "Time (weeks)", breaks = c(0:9)*8) +
   scale_y_continuous(name = "Concentration (mg/L)", expand = expansion(mult = c(0.01, 0.05))) +
   facet_grid(biomarker ~ type, scales = "free_y") +
   theme_classic()
+
+plot_df_long_summary <- df_long_summary %>% 
+  ggplot(aes(x = gest, fill = type)) +
+  geom_ribbon(aes(ymin = p_low, ymax = p_high), alpha = 0.7) +
+  geom_line(aes(y = median, linetype = "Median")) +
+  geom_line(aes(y = p_25, linetype = "Quartiles")) +
+  geom_line(aes(y = p_75, linetype = "Quartiles")) +
+  geom_line(aes(y = p_high, linetype = "95% Quantiles")) +
+  geom_line(aes(y = p_low, linetype = "95% Quantiles")) +
+  scale_linetype_manual(values = c(1, 3, 2), breaks = c("Median", "Quartiles", "95% Quantiles"), name = NULL) + 
+  
+  scale_fill_manual(values = color_palette, limits = force) +
+  scale_x_continuous(name = "Time (hours)", breaks = c(0:9)*8) +
+  scale_y_continuous(name = "Concentration (mg/L)", expand = expansion(mult = c(0.01, 0.05))) +
+  facet_grid(biomarker ~ type, scales = "free_y") +
+  theme_bw() +
+  theme(strip.background = element_rect(fill = "white"))
+
 
 plot_combination_long <-  df_sim_marg %>% 
   mutate(type = "Marginal") %>% 
@@ -126,7 +144,7 @@ plot_combination_long <-  df_sim_marg %>%
   pivot_longer(-c(ID, gest, type), names_to = "biomarker", values_to = "conc") %>% 
   ggplot(aes(x = gest, y = conc)) +
   geom_line(aes(group = ID), alpha = 0.3, color = "red") +
-  scale_x_continuous(name = "Time (hours)", breaks = c(0:9)*8) +
+  scale_x_continuous(name = "Time (weeks)", breaks = c(0:9)*8) +
   scale_y_continuous(name = "Concentration (mg/L)") +
   geom_line(data = df_long_summary %>% filter(type == "Observed") %>% select(-type), aes(y = median)) +
   geom_line(data = df_long_summary %>% filter(type == "Observed") %>% select(-type), aes(y = p_25), linetype = 3) +
@@ -211,7 +229,7 @@ plot_df_long_summary <- df_long_summary %>%
   geom_line(aes(y = p_high), linetype = 2) +
   geom_line(aes(y = p_low), linetype = 2) +
   geom_ribbon(aes(ymin = min, ymax = max), alpha = 0.3) +
-  scale_x_continuous(name = "Time (hours)", breaks = c(0:9)*8) +
+  scale_x_continuous(name = "Time (weeks)", breaks = c(0:9)*8) +
   scale_y_continuous(name = "Concentration (mg/L)", expand = expansion(mult = c(0.01, 0.05))) +
   facet_grid(biomarker ~ type, scales = "free_y") +
   theme_classic()
@@ -229,7 +247,7 @@ plot_df_long_summary <- df_long_summary %>%
   scale_linetype_manual(values = c(1, 3, 2), breaks = c("Median", "Quartiles", "95% Quantiles"), name = NULL) + 
   
   scale_fill_manual(values = color_palette, limits = force) +
-  scale_x_continuous(name = "Time (hours)", breaks = c(0:9)*8) +
+  scale_x_continuous(name = "Time (weeks)", breaks = c(0:9)*8) +
   scale_y_continuous(name = "Concentration (mg/L)", expand = expansion(mult = c(0.01, 0.05))) +
   facet_grid(biomarker ~ type, scales = "free_y") +
   theme_bw() +
@@ -237,9 +255,9 @@ plot_df_long_summary <- df_long_summary %>%
 
 #New colors separate lines
 long_all <- df_sim_marg %>% 
-  mutate(type = "Marginal") %>% 
-  bind_rows(df_poly %>% select(which(!grepl("b\\d_", names(df_poly)))) %>% mutate(type = "Observed")) %>% 
-  bind_rows(df_sim$values %>% mutate(type = "Copula")) %>% 
+  mutate(type = "marginal\ndistribution") %>% 
+  bind_rows(df_poly %>% select(which(!grepl("b\\d_", names(df_poly)))) %>% mutate(type = "observed")) %>% 
+  bind_rows(df_sim$values %>% mutate(type = "copula")) %>% 
   pivot_longer(-c(ID, gest, type), names_to = "biomarker", values_to = "conc")
 
 
@@ -254,7 +272,7 @@ plot_df_long_summary_lines <- df_long_summary %>%
   scale_linetype_manual(values = c(1, 3, 2), breaks = c("Median", "Quartiles", "95% Quantiles"), name = NULL) + 
   
   scale_color_manual(values = color_palette, limits = force) +
-  scale_x_continuous(name = "Time (hours)", breaks = c(0:9)*8) +
+  scale_x_continuous(name = "Time (weeks)", breaks = c(0:9)*8) +
   scale_y_continuous(name = "Concentration (mg/L)", expand = expansion(mult = c(0.01, 0.05))) +
   facet_grid(biomarker ~ type, scales = "free_y") +
   theme_bw() +
@@ -263,6 +281,55 @@ plot_df_long_summary_lines <- df_long_summary %>%
 pdf("results/figures/longitudinal_comparison_lines.pdf", height = 8, width = 6)
 print(plot_df_long_summary_lines)
 dev.off()
+
+#presentation
+plot_df_long_summary_lines <- df_long_summary %>% 
+  ggplot(aes(x = gest)) +
+  geom_line(data = long_all, aes(y = conc, group = ID, color = type), alpha = 0.7) +
+  geom_line(aes(y = median, linetype = "Median")) +
+  geom_line(aes(y = p_25, linetype = "Quartiles")) +
+  geom_line(aes(y = p_75, linetype = "Quartiles")) +
+  geom_line(aes(y = p_high, linetype = "95% Quantiles")) +
+  geom_line(aes(y = p_low, linetype = "95% Quantiles")) +
+  scale_linetype_manual(values = c(1, 3, 2), breaks = c("Median", "Quartiles", "95% Quantiles"), name = NULL) + 
+  
+  scale_color_manual(values = color_palette, limits = force) +
+  scale_x_continuous(name = "Time (weeks)", breaks = c(0:9)*8) +
+  scale_y_continuous(name = "Concentration (mg/L)", expand = expansion(mult = c(0.01, 0.05))) +
+  facet_grid(biomarker ~ type, scales = "free_y")+
+  theme_bw() +
+  theme(strip.background = element_rect(fill = "white"))
+
+
+
+pdf("presentation/figures/lines_longitudinal_covariates.pdf", height = 8, width = 6)
+print(plot_df_long_summary_lines)
+dev.off()
+
+plot_df_albumin <- df_long_summary %>% 
+  filter(biomarker == "Albumin") %>% 
+  ggplot(aes(x = gest)) +
+  geom_line(data = long_all %>% filter(biomarker == "Albumin"), 
+            aes(y = conc, group = ID, color = type), alpha = 0.7) +
+  geom_line(aes(y = median, linetype = "Median")) +
+  geom_line(aes(y = p_25, linetype = "Quartiles")) +
+  geom_line(aes(y = p_75, linetype = "Quartiles")) +
+  geom_line(aes(y = p_high, linetype = "95% Quantiles")) +
+  geom_line(aes(y = p_low, linetype = "95% Quantiles")) +
+  scale_linetype_manual(values = c(1, 3, 2), breaks = c("Median", "Quartiles", "95% Quantiles"), name = NULL) + 
+  
+  scale_color_manual(values = color_palette, limits = force) +
+  scale_x_continuous(name = "Time (weeks)", breaks = c(0:9)*8) +
+  scale_y_continuous(name = "Concentration (mg/L)", expand = expansion(mult = c(0.01, 0.05))) +
+  facet_grid(biomarker ~ type, scales = "free_y")+
+  theme_bw() +
+  theme(strip.background = element_rect(fill = "white"))
+
+pdf("presentation/figures/lines_longitudinal_albumin.pdf", height = 2, width = 6)
+print(plot_df_albumin)
+dev.off()
+
+
 
 
 ####### Summary metrics AUC bigger simulation #########
