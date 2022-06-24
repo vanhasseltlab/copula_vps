@@ -195,7 +195,7 @@ sim_marginal <- data.frame(CREA = marg_crea$rdist(n_sim*m),
 # Get result statistics
 marginal_II_results <- get_statistics_multiple_sims(sim_marginal, m, n_statistics, type = "marginal_II")
 
-#### - Multivariate Normal Distribution - ####
+#### - Multivariate Normal Distribution I: log transformed- ####
 # Fit distribution
 data_clean_trans <- data_clean %>% 
   mutate(log_BW = log(BW),
@@ -215,7 +215,26 @@ sim_mvnorm <- data.frame(CREA = sim_mvnorm_raw$CREA,
                          type = "simulated", 
                          simulation_nr = rep(1:m, each = n_sim))
 # Get result statistics
-mvnorm_results <- get_statistics_multiple_sims(sim_mvnorm, m, n_statistics, type = "multivariate normal")
+mvnorm_I_results <- get_statistics_multiple_sims(sim_mvnorm, m, n_statistics, type = "multivariate normal I")
+
+#### - Multivariate Normal Distribution II: no transformations- ####
+# Fit distribution
+mvnorm_param <- Rfast::mvnorm.mle(as.matrix(data_clean))
+mvnorm_fit <- list(pdf = function(u) qmvnorm(u, mean = mvnorm_param$mu, sigma = mvnorm_param$sigma),
+                   pit = function(x) pmvnorm(x, mean = mvnorm_param$mu, sigma = mvnorm_param$sigma),
+                   rdist = function(n) rmvnorm(n, mean = mvnorm_param$mu, sigma = mvnorm_param$sigma))
+# Draw sample
+set.seed(seed_nr)
+sim_mvnorm_raw <- as.data.frame(mvnorm_fit$rdist(n_sim*m))
+names(sim_mvnorm_raw) <- names(data_clean)
+sim_mvnorm <- data.frame(sim_mvnorm_raw,
+                         type = "simulated", 
+                         simulation_nr = rep(1:m, each = n_sim))
+
+# Get result statistics
+mvnorm_II_results <- get_statistics_multiple_sims(sim_mvnorm, m, n_statistics, type = "multivariate normal II")
+
+
 
 #### - Conditional Distribution - ####
 # Draw sample
@@ -231,7 +250,7 @@ all_statistics <- copula_III_results %>%
   #bind_rows(copula_II_results) %>% 
   #bind_rows(marginal_I_results) %>% 
   bind_rows(marginal_II_results) %>% 
-  bind_rows(mvnorm_results) %>% 
+  bind_rows(mvnorm_II_results) %>% 
   bind_rows(cd_results)
 
 write.csv(all_statistics, file = paste0("results/comparison/results_", simulation_type, ".csv"), row.names = F)
@@ -257,7 +276,7 @@ results_plot <-  all_statistics %>%
                filter(statistic %in% c("mean", "median", "sd", "covariance")) , 
              aes(yintercept = value, linetype = type)) +
 
-  scale_fill_manual(values = create_colors(c("copula_III", "marginal_II", "multivariate normal", "conditional distribution"), 
+  scale_fill_manual(values = create_colors(c("copula_III", "marginal_II", "multivariate normal II", "conditional distribution"), 
                                            c("turquoise", "dark yellow", "dark green", "pink"))) +
   scale_x_discrete(guide = guide_axis(angle = 90)) +
   facet_wrap( ~ covariate , scales = "free", nrow = 2, dir = "v") +
@@ -273,7 +292,7 @@ results_plot_relative <- all_statistics %>%
   geom_boxplot() +
   geom_hline(yintercept = c(-0.2, 0.2), linetype = 2, color = "grey65") +
   geom_hline(yintercept = 0, linetype = 1, color = "black") +
-  scale_fill_manual(values = create_colors(c("copula_III", "marginal_II", "multivariate normal", "conditional distribution"), 
+  scale_fill_manual(values = create_colors(c("copula_III", "marginal_II", "multivariate normal II", "conditional distribution"), 
                                            c("turquoise", "dark yellow", "dark green", "pink"))) +
   scale_x_discrete(guide = guide_axis(angle = 90)) +
   facet_wrap(statistic ~ . , scales = "free", nrow = 2, dir = "v") +
