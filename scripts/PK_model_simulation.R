@@ -40,53 +40,6 @@ df_pk <- df_copula %>% mutate(type = "copula") %>%
   bind_rows(df_cd %>% mutate(type = "conditional")) %>% 
   bind_rows(df_marg %>% mutate(type = "marginal"))
 
-# plot
-plot_lines_weight <- df_pk %>% 
-  filter(id %in% 1:nrow(data_grimsley)) %>% 
-  ggplot(aes(x = time/60)) +
-  geom_line(aes(y = conc, group = id, color = wgt), alpha = 0.3) +
-  scale_color_viridis_c(trans = "log10") +
-  scale_x_continuous(name = "Time (hours)", breaks = c(0:9)*8) +
-  scale_y_continuous(name = "Concentration (mg/L)", expand = expansion(mult = c(0.01, 0.05))) +
-  labs(color = "Weight (kg)") +
-  facet_wrap(~ type) +
-  theme_classic()
-
-
-df_pk_summary <- df_pk %>% 
-  group_by(time, type) %>% 
-  summarize(median = median(conc), p_high = quantile(conc, 0.975), 
-            p_low = quantile(conc, 0.025), p_25 = quantile(conc, 0.25), 
-            p_75 = quantile(conc, 0.75), max = quantile(conc, 0.99), min = quantile(conc, 0.01)) %>% ungroup()
-
-#95% intervals
-plot_pk_summary <- df_pk_summary %>% 
-  ggplot(aes(x = time/60, fill = type)) +
-  geom_line(aes(y = median)) +
-  geom_line(aes(y = p_25), linetype = 3) +
-  geom_line(aes(y = p_75), linetype = 3) +
-  geom_line(aes(y = p_high), linetype = 2) +
-  geom_line(aes(y = p_low), linetype = 2) +
-  geom_ribbon(aes(ymin = min, ymax = max), alpha = 0.3) +
-  scale_x_continuous(name = "Time (hours)", breaks = c(0:9)*8) +
-  scale_y_continuous(name = "Concentration (mg/L)", expand = expansion(mult = c(0.01, 0.05))) +
-  facet_grid(~ type) +
-  theme_classic()
-
-pdf("results/figures/PK_model_assessment.pdf", width = 8, height = 5)
-
-print(plot_pk_summary)
-print(plot_lines_weight)
-
-print(plot_lines_weight + geom_line(data = df_pk_summary, aes(y = median)) +
-        geom_line(data = df_pk_summary, aes(y = p_25), linetype = 3) +
-        geom_line(data = df_pk_summary, aes(y = p_75), linetype = 3) +
-        geom_line(data = df_pk_summary, aes(y = p_high), linetype = 2) +
-        geom_line(data = df_pk_summary, aes(y = p_low), linetype = 2))
-
-dev.off()
-
-
 df_pk_summary <- df_pk %>% 
   group_by(time, type) %>% 
   summarize(median = median(conc), p_high = quantile(conc, 0.975), 
@@ -94,6 +47,7 @@ df_pk_summary <- df_pk %>%
             p_75 = quantile(conc, 0.75), max = quantile(conc, 0.99), min = quantile(conc, 0.01)) %>% ungroup() %>% 
   mutate(Type = factor(str_to_title(type), levels = c("Observed", "Marginal", "Copula", "Conditional")))
 
+# plot
 plot_lines_weight_full <- df_pk %>% 
   mutate(Type = factor(str_to_title(type), levels = c("Observed", "Marginal", "Copula"))) %>% 
   filter(id %in% 1:nrow(data_grimsley)) %>% 
@@ -140,16 +94,18 @@ dev.off()
 
 #Plot presentations
 plot_data <- df_pk %>% 
-  
   filter(time/60 <= 24) %>% 
-  
   filter(id %in% 1:nrow(data_grimsley)) %>% 
   mutate(Type = factor(str_to_title(type), levels = c("Observed", "Marginal", "Copula", "Conditional"))) %>% 
-  mutate(Type = recode(type, marginal = "marginal\ndistribution", conditional = "conditional\ndistribution"))
+  mutate(Type = recode(type, marginal = "marginal\ndistribution", conditional = "conditional\ndistribution")) %>% 
+  mutate(Type = factor(Type, levels = c("observed", "copula", "marginal\ndistribution", "conditional\ndistribution"))) %>% 
+  filter(Type != "conditional\ndistribution")
 
 df_pk_summary_24 <-  df_pk_summary %>% 
   filter(time/60 <= 24) %>% 
-  mutate(Type = recode(type, marginal = "marginal\ndistribution", conditional = "conditional\ndistribution"))
+  mutate(Type = recode(type, marginal = "marginal\ndistribution", conditional = "conditional\ndistribution")) %>% 
+  mutate(Type = factor(Type, levels = c("observed", "copula", "marginal\ndistribution", "conditional\ndistribution"))) %>% 
+  filter(Type != "conditional\ndistribution")
 
 plot_lines_weight_pres <- plot_data %>% 
   ggplot(aes(x = time/60)) +
@@ -159,21 +115,40 @@ plot_lines_weight_pres <- plot_data %>%
   labs(color = "Weight (kg)") +
   facet_grid(~ Type) +
   theme_bw() + 
-  geom_line(data = df_pk_summary_24, aes(y = median, linetype = "Median")) +
-  geom_line(data = df_pk_summary_24, aes(y = p_25, linetype = "Quartiles")) +
-  geom_line(data = df_pk_summary_24, aes(y = p_75, linetype = "Quartiles")) +
-  geom_line(data = df_pk_summary_24, aes(y = p_high, linetype = "95% Quantiles")) +
-  geom_line(data = df_pk_summary_24, aes(y = p_low, linetype = "95% Quantiles")) +
+  geom_line(data = df_pk_summary_24, aes(y = median, linetype = "Median"), show.legend = F) +
+  geom_line(data = df_pk_summary_24, aes(y = p_25, linetype = "Quartiles"), show.legend = F) +
+  geom_line(data = df_pk_summary_24, aes(y = p_75, linetype = "Quartiles"), show.legend = F) +
+  geom_line(data = df_pk_summary_24, aes(y = p_high, linetype = "95% Quantiles"), show.legend = F) +
+  geom_line(data = df_pk_summary_24, aes(y = p_low, linetype = "95% Quantiles"), show.legend = F) +
   scale_linetype_manual(values = c(1, 3, 2), breaks = c("Median", "Quartiles", "95% Quantiles"), name = NULL) + 
   theme(strip.background = element_rect(fill = "white"), strip.text = element_text(size = 10))
 
 
 pdf("presentation/figures/lines_PK_model_assessment.pdf", width = 7, height = 3.6)
 print(plot_lines_weight_pres +
-        scale_color_gradient2(low = "#f46e32", high = "#001158", trans = "log10", mid = "#243676", midpoint = log10(7)))
-print(plot_lines_weight_pres +
-        scale_color_gradient2(low = "#F54C00", mid = "#3652B7", trans = "log10", high = "#001158", midpoint = log10(5)))
+        scale_color_gradientn(colours = c("#f46e32", "#f46e32", "#8592BC", "#001158"), trans = "log10"))
 dev.off()
+
+pdf("presentation/figures/lines_PK_model_assessment.pdf", width = 6, height = 3.6)
+print(plot_lines_weight_pres +
+        scale_color_gradientn(colours = c("#f46e32", "#f46e32", "#8592BC", "#001158"), trans = "log10"))
+dev.off()
+
+#Typical PK
+plot_typical_PK <- df_pk_summary_24 %>% 
+  filter(type == "observed") %>% 
+  ggplot(aes(x = time/60)) +
+  geom_line(aes(y = median), color = "#8592BC", size = 1.5) +
+  scale_x_continuous(expand = expansion(mult = c(0, 0)), breaks = c(seq(0, 20, 5), 24)) + 
+  scale_y_continuous(expand = expansion(mult = c(0, 0.05))) +
+  labs(x = "Time (hour)", y = "Vancomycin concentration (mg/L)") +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank())
+
+pdf(file = "presentation/figures/line_typical_pk_Grimsey.pdf", width = 2.7, height = 2.7)
+print(plot_typical_PK)
+dev.off()
+
 
 #AUC comparison
 
@@ -216,7 +191,7 @@ AUC_df %>% filter(type != "observed") %>%
   ggplot(aes(y = AUC, fill = type, x = dosing_time)) +
   geom_boxplot(data = AUC_df %>% filter(type == "observed"), alpha = 1) +
   geom_boxplot(alpha = 0.5) +
-  scale_fill_manual(values = c("#FC6257", "#00AF2A", "grey65")) +
+  #scale_fill_manual(values = c("#FC6257", "#00AF2A", "grey65")) +
   
   theme_bw()
 

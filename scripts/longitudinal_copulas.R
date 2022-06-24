@@ -283,9 +283,13 @@ print(plot_df_long_summary_lines)
 dev.off()
 
 #presentation
+names(color_palette)[1:3] <- c("observed", "copula", "marginal\ndistribution")
+
 plot_df_long_summary_lines <- df_long_summary %>% 
+  mutate(type = factor(type, levels = c("observed", "copula", "marginal\ndistribution"))) %>% 
   ggplot(aes(x = gest)) +
-  geom_line(data = long_all, aes(y = conc, group = ID, color = type), alpha = 0.7) +
+  geom_line(data = long_all %>% 
+              mutate(type = factor(type, levels = c("observed", "copula", "marginal\ndistribution"))), aes(y = conc, group = ID, color = type), alpha = 0.7) +
   geom_line(aes(y = median, linetype = "Median")) +
   geom_line(aes(y = p_25, linetype = "Quartiles")) +
   geom_line(aes(y = p_75, linetype = "Quartiles")) +
@@ -308,8 +312,10 @@ dev.off()
 
 plot_df_albumin <- df_long_summary %>% 
   filter(biomarker == "Albumin") %>% 
+  mutate(type = factor(type, levels = c("observed", "copula", "marginal\ndistribution"))) %>% 
   ggplot(aes(x = gest)) +
-  geom_line(data = long_all %>% filter(biomarker == "Albumin"), 
+  geom_line(data = long_all %>% filter(biomarker == "Albumin") %>% 
+              mutate(type = factor(type, levels = c("observed", "copula", "marginal\ndistribution"))), 
             aes(y = conc, group = ID, color = type), alpha = 0.7) +
   geom_line(aes(y = median, linetype = "Median")) +
   geom_line(aes(y = p_25, linetype = "Quartiles")) +
