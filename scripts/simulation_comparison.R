@@ -7,6 +7,7 @@ library(actuar)
 library(EnvStats)
 library(mvtnorm)
 library(kde1d)
+library(patchwork)
 select <- dplyr::select
 
 ##### - Data - #####
@@ -40,13 +41,13 @@ data_total <- data_full %>%
 source("scripts/functions/functions.R")
 source("scripts/functions/Smania_Jonsson_MICE_simulation.R")
 source("scripts/functions/plot_distributions.R")
-color_palette <- create_colors(c("Observed", "Copula", "Marginal", "CD", "MVN"), 
-                               selected = c("grey", "turquoise", "dark yellow", "pink", "dark green"))
+color_palette <- create_colors(c("observed", "copula", "marginal distribution", "conditional distribution", "mvnormal distribution", "bootstrap"), 
+                               selected = c("grey", "turquoise", "dark yellow", "pink", "dark green", "midlight blue"))
 
 ##### - Simulations - #####
 # Simulation settings
 #set type of simulation study: "full_data" or "random_split" 
-simulation_type <- "full_data"
+simulation_type <- "random_split"
 
 
 if (simulation_type == "full_data") {
@@ -73,61 +74,7 @@ obs_results <- get_statistics(data_test, columns = c("age", "BW", "CREA"))
 
 write.csv(obs_results, file = paste0("results/comparison/obs_results_", simulation_type, ".csv"), row.names = F)
 
-#### - Copulas I: parametric - ####
-# Fit distribution
-param_crea_raw <- mixtools::normalmixEM(data_clean$CREA, mu = c(20, 60))
-param_crea <- list(estimate = c(mean1 = param_crea_raw$mu[1], sd1 = param_crea_raw$sigma[1], 
-                                mean2 = param_crea_raw$mu[2], sd2 = param_crea_raw$sigma[2], 
-                                p.mix = param_crea_raw$lambda[2]))
-marg_crea <- estimate_parametric_marginal(data_clean$CREA, "normMix", param = param_crea)
-marg_age <- estimate_parametric_marginal(data_clean$age, "nbinom")
-marg_BW <- estimate_parametric_marginal(data_clean$BW, "lnorm")
-
-data_unif <- data.frame(CREA = tranform_to_uniform(data_clean$CREA, marg_crea),
-                        age = tranform_to_uniform(data_clean$age, marg_age),
-                        BW = tranform_to_uniform(data_clean$BW, marg_BW),
-                        age_d = tranform_to_uniform(data_clean$age - 1, marg_age))
-
-vine_fit <- vinecop(data_unif, family_set = "parametric", var_types = c("c", "d", "c"))
-vine_distribution <- vinecop_dist(vine_fit$pair_copulas, vine_fit$structure, var_types =  c("c", "d", "c"))
-# Draw sample
-set.seed(seed_nr)
-sim_unif <- as.data.frame(rvinecop(n_sim*m, vine_distribution))
-names(sim_unif) <- names(data_unif)[1:3]
-sim_copula_I <- data.frame(CREA = marg_crea$pdf(sim_unif$CREA),
-                           age = marg_age$pdf(sim_unif$age),
-                           BW = marg_BW$pdf(sim_unif$BW),
-                           type = "simulated", 
-                           simulation_nr = rep(1:m, each = n_sim))
-
-# Get result statistics
-copula_I_results <- get_statistics_multiple_sims(sim_copula_I, m, n_statistics, type = "copula_I")
-
-#### - Copulas II: non-parametric - ####
-# Fit distribution
-marg_crea <- estimate_spline_marginal(data_clean$CREA)
-marg_age <- estimate_spline_marginal(data_clean$age)
-marg_BW <- estimate_spline_marginal(data_clean$BW)
-
-data_unif <- data.frame(CREA = tranform_to_uniform(data_clean$CREA, marg_crea),
-                        age = tranform_to_uniform(data_clean$age, marg_age),
-                        BW = tranform_to_uniform(data_clean$BW, marg_BW))
-
-vine_fit <- vinecop(data_unif, family_set = "all", var_types = c("c", "c", "c"))
-vine_distribution <- vinecop_dist(vine_fit$pair_copulas, vine_fit$structure, var_types =  c("c", "c", "c"))
-# Draw sample
-set.seed(seed_nr)
-sim_unif <- as.data.frame(rvinecop(n_sim*m, vine_distribution))
-names(sim_unif) <- names(data_unif)[1:3]
-sim_copula_II <- data.frame(CREA = marg_crea$pdf(sim_unif$CREA),
-                           age = marg_age$pdf(sim_unif$age),
-                           BW = marg_BW$pdf(sim_unif$BW),
-                           type = "simulated", 
-                           simulation_nr = rep(1:m, each = n_sim))
-# Get result statistics
-copula_II_results <- get_statistics_multiple_sims(sim_copula_II, m, n_statistics, type = "copula_II")
-
-#### - Copulas III: mix spline marginal + parametric copula - ####
+#### - Copulas: spline marginal + parametric copula - ####
 # Fit distribution
 marg_crea <- estimate_spline_marginal(data_clean$CREA)
 marg_age <- estimate_spline_marginal(data_clean$age)
@@ -146,10 +93,10 @@ names(sim_unif) <- names(data_unif)[1:3]
 sim_copula_III <- data.frame(CREA = marg_crea$pdf(sim_unif$CREA),
                              age = marg_age$pdf(sim_unif$age),
                              BW = marg_BW$pdf(sim_unif$BW),
-                             type = "simulated", 
-                             simulation_nr = rep(1:m, each = n_sim))
+                             simulation_nr = rep(1:m, each = n_sim),
+                             simulation = "copula")
 
-copula_III_results <- get_statistics_multiple_sims(sim_copula_III, m, n_statistics, type = "copula_III")
+copula_results <- get_statistics_multiple_sims(sim_copula_III, m, n_statistics, type = "copula")
 
 
 if (simulation_type == "full_data") {
@@ -161,63 +108,23 @@ if (simulation_type == "full_data") {
 }
 
 
-#### - Marginals I: parametric - ####
-# Fit distribution
-param_crea_raw <- mixtools::normalmixEM(data_clean$CREA)
-param_crea <- list(estimate = c(mean1 = param_crea_raw$mu[1], sd1 = param_crea_raw$sigma[1], 
-                                mean2 = param_crea_raw$mu[2], sd2 = param_crea_raw$sigma[2], 
-                                p.mix = param_crea_raw$lambda[2]))
-marg_crea <- estimate_parametric_marginal(data_clean$CREA, "normMix", param = param_crea)
-marg_age <- estimate_parametric_marginal(data_clean$age, "nbinom")
-marg_BW <- estimate_parametric_marginal(data_clean$BW, "lnorm")
-# Draw sample
-set.seed(seed_nr)
-sim_marginal <- data.frame(CREA = marg_crea$rdist(n_sim*m),
-                           age = marg_age$rdist(n_sim*m),
-                           BW = marg_BW$rdist(n_sim*m),
-                           type = "simulated", 
-                           simulation_nr = rep(1:m, each = n_sim))
-# Get result statistics
-marginal_I_results <- get_statistics_multiple_sims(sim_marginal, m, n_statistics, type = "marginal_I")
-
-#### - Marginals II: splines - ####
+#### - Marginals: splines - ####
 # Fit distribution
 marg_crea <- estimate_spline_marginal(data_clean$CREA)
 marg_age <- estimate_spline_marginal(data_clean$age)
 marg_BW <- estimate_spline_marginal(data_clean$BW)
+
 # Draw sample
 set.seed(seed_nr)
 sim_marginal <- data.frame(CREA = marg_crea$rdist(n_sim*m),
                            age = marg_age$rdist(n_sim*m),
                            BW = marg_BW$rdist(n_sim*m),
-                           type = "simulated", 
-                           simulation_nr = rep(1:m, each = n_sim))
+                           simulation_nr = rep(1:m, each = n_sim),
+                           simulation = "marginal distribution")
 # Get result statistics
-marginal_II_results <- get_statistics_multiple_sims(sim_marginal, m, n_statistics, type = "marginal_II")
+marginal_results <- get_statistics_multiple_sims(sim_marginal, m, n_statistics, type = "marginal distribution")
 
-#### - Multivariate Normal Distribution I: log transformed- ####
-# Fit distribution
-data_clean_trans <- data_clean %>% 
-  mutate(log_BW = log(BW),
-         log_age = log(age)) %>% 
-  dplyr::select(log_age, log_BW, CREA)
-mvnorm_param <- Rfast::mvnorm.mle(as.matrix(data_clean_trans))
-mvnorm_fit <- list(pdf = function(u) qmvnorm(u, mean = mvnorm_param$mu, sigma = mvnorm_param$sigma),
-                   pit = function(x) pmvnorm(x, mean = mvnorm_param$mu, sigma = mvnorm_param$sigma),
-                   rdist = function(n) rmvnorm(n, mean = mvnorm_param$mu, sigma = mvnorm_param$sigma))
-# Draw sample
-set.seed(seed_nr)
-sim_mvnorm_raw <- as.data.frame(mvnorm_fit$rdist(n_sim*m))
-names(sim_mvnorm_raw) <- names(data_clean_trans)
-sim_mvnorm <- data.frame(CREA = sim_mvnorm_raw$CREA,
-                         age = exp(sim_mvnorm_raw$log_age),
-                         BW = exp(sim_mvnorm_raw$log_BW),
-                         type = "simulated", 
-                         simulation_nr = rep(1:m, each = n_sim))
-# Get result statistics
-mvnorm_I_results <- get_statistics_multiple_sims(sim_mvnorm, m, n_statistics, type = "multivariate normal I")
-
-#### - Multivariate Normal Distribution II: no transformations- ####
+#### - Multivariate Normal Distribution - ####
 # Fit distribution
 mvnorm_param <- Rfast::mvnorm.mle(as.matrix(data_clean))
 mvnorm_fit <- list(pdf = function(u) qmvnorm(u, mean = mvnorm_param$mu, sigma = mvnorm_param$sigma),
@@ -228,11 +135,11 @@ set.seed(seed_nr)
 sim_mvnorm_raw <- as.data.frame(mvnorm_fit$rdist(n_sim*m))
 names(sim_mvnorm_raw) <- names(data_clean)
 sim_mvnorm <- data.frame(sim_mvnorm_raw,
-                         type = "simulated", 
-                         simulation_nr = rep(1:m, each = n_sim))
+                         simulation_nr = rep(1:m, each = n_sim),
+                         simulation = "mvnormal distribution")
 
 # Get result statistics
-mvnorm_II_results <- get_statistics_multiple_sims(sim_mvnorm, m, n_statistics, type = "multivariate normal II")
+mvnorm_results <- get_statistics_multiple_sims(sim_mvnorm, m, n_statistics, type = "mvnormal distribution")
 
 
 
@@ -241,75 +148,69 @@ mvnorm_II_results <- get_statistics_multiple_sims(sim_mvnorm, m, n_statistics, t
 set.seed(seed_nr)
 sim_cd <- simCovMICE(m = m, data_clean, catCovs = NULL)
 names(sim_cd)[names(sim_cd) == "NSIM"] <- "simulation_nr"
+sim_cd$simulation <- "conditional distribution"
 # Get result statistics
 cd_results <- get_statistics_multiple_sims(sim_cd, m, n_statistics, type = "conditional distribution")
 
+#### - Bootstrap - ####
+# Draw sample
+set.seed(seed_nr)
+sim_bootstrap_raw <- data_clean[sample(1:n_sim, size = n_sim*m, replace = TRUE), ]
+sim_bootstrap <- data.frame(sim_bootstrap_raw,
+                            simulation_nr = rep(1:m, each = n_sim),
+                            simulation = "bootstrap")
+
+# Get result statistics
+bootstrap_results <- get_statistics_multiple_sims(sim_bootstrap, m, n_statistics, type = "bootstrap")
+
 ##### - Plot Results - #####
-all_statistics <- copula_III_results %>% 
-  #bind_rows(copula_I_results) %>% 
-  #bind_rows(copula_II_results) %>% 
-  #bind_rows(marginal_I_results) %>% 
-  bind_rows(marginal_II_results) %>% 
-  bind_rows(mvnorm_II_results) %>% 
-  bind_rows(cd_results)
+all_statistics <- copula_results %>% 
+  bind_rows(marginal_results) %>% 
+  bind_rows(mvnorm_results) %>% 
+  bind_rows(cd_results) %>% 
+  bind_rows(bootstrap_results)
 
 write.csv(all_statistics, file = paste0("results/comparison/results_", simulation_type, ".csv"), row.names = F)
 
 all_sim <- sim_copula_III %>% 
-  mutate(simulation = "copula") %>% 
-  bind_rows(sim_marginal %>% 
-              mutate(simulation = "marginal") ) %>% 
-  bind_rows(sim_mvnorm %>% 
-              mutate(simulation = "mvnorm") ) %>% 
-  bind_rows(sim_cd %>% 
-              mutate(simulation = "cd")) %>% 
-  bind_rows(data_clean %>% mutate(simulation = "observed"))
+  bind_rows(sim_marginal) %>% 
+  bind_rows(sim_mvnorm) %>% 
+  bind_rows(sim_cd) %>% 
+  bind_rows(sim_bootstrap) %>% 
+  bind_rows(data_clean %>% mutate(simulation = "observed")) 
 
 
 write.csv(all_sim, file = paste0("results/comparison/simulated_values_", simulation_type, ".csv"), row.names = F)
 
-results_plot <-  all_statistics %>% 
-  filter(statistic %in% c("mean", "median", "sd", "covariance")) %>% 
-  ggplot(aes(y = value, x = statistic, fill = type)) +
-  geom_boxplot() +
-  geom_hline(data = obs_results %>% mutate(type = "observed") %>% 
-               filter(statistic %in% c("mean", "median", "sd", "covariance")) , 
-             aes(yintercept = value, linetype = type)) +
-
-  scale_fill_manual(values = create_colors(c("copula_III", "marginal_II", "multivariate normal II", "conditional distribution"), 
-                                           c("turquoise", "dark yellow", "dark green", "pink"))) +
-  scale_x_discrete(guide = guide_axis(angle = 90)) +
-  facet_wrap( ~ covariate , scales = "free", nrow = 2, dir = "v") +
-  scale_linetype_manual(values = 2, name = NULL) +
-  theme_bw()
-
 
 results_plot_relative <- all_statistics %>% 
-  filter(statistic %in% c("mean", "median", "sd", "covariance")) %>% 
+  filter(statistic %in% c("mean", "sd", "covariance")) %>% 
   left_join(obs_results %>% rename(observed = value)) %>% 
   mutate(rel_value = (value - observed)/observed) %>% 
   ggplot(aes(y = rel_value, x = covariate, fill = type)) +
   geom_boxplot() +
   geom_hline(yintercept = c(-0.2, 0.2), linetype = 2, color = "grey65") +
   geom_hline(yintercept = 0, linetype = 1, color = "black") +
-  scale_fill_manual(values = create_colors(c("copula_III", "marginal_II", "multivariate normal II", "conditional distribution"), 
-                                           c("turquoise", "dark yellow", "dark green", "pink"))) +
+  scale_fill_manual(values = color_palette, limits = force) +
   scale_x_discrete(guide = guide_axis(angle = 90)) +
-  facet_wrap(statistic ~ . , scales = "free", nrow = 2, dir = "v") +
+  facet_grid(~ statistic , scales = "free") +
   theme_bw()
 
 pdf(paste0("results/figures/simulation_statistics_", simulation_type,".pdf"), height = 7, width = 10)
-print(results_plot)
 print(results_plot_relative)
 plot_comparison_distribution_sim_obs_generic(sim_cd, data_test, sim_nr = 2, variables = c("age", "BW", "CREA"), 
-                                     plot_type = "both", title = "Conditional Distributions", pick_color = color_palette[c("CD", "Observed")])
+                                     plot_type = "both", title = "Conditional Distributions", pick_color = color_palette[c("conditional distribution", "observed")])
 plot_comparison_distribution_sim_obs_generic(sim_copula_III, data_test, sim_nr = 2,  variables = c("age", "BW", "CREA"), 
-                                     plot_type = "both", title = "Copula", pick_color = color_palette[c("Copula", "Observed")])
+                                     plot_type = "both", title = "Copula", pick_color = color_palette[c("copula", "observed")])
 plot_comparison_distribution_sim_obs_generic(sim_mvnorm, data_test, sim_nr = 2,  variables = c("age", "BW", "CREA"), 
-                                     plot_type = "both", title = "Multivariate normal", pick_color = color_palette[c("MVN", "Observed")])
+                                     plot_type = "both", title = "Multivariate normal", pick_color = color_palette[c("mvnormal distribution", "observed")])
 plot_comparison_distribution_sim_obs_generic(sim_marginal, data_test, sim_nr = 2,  variables = c("age", "BW", "CREA"), 
-                                     plot_type = "both", title = "Marginal", pick_color = color_palette[c("Marginal", "Observed")])
+                                     plot_type = "both", title = "Marginal", pick_color = color_palette[c("marginal distribution", "observed")])
+plot_comparison_distribution_sim_obs_generic(sim_bootstrap, data_test, sim_nr = 2,  variables = c("age", "BW", "CREA"), 
+                                             plot_type = "both", title = "Bootstrap", pick_color = color_palette[c("bootstrap", "observed")])
 dev.off()
+
+
 
 bias_variance <- all_statistics %>% 
   left_join(obs_results %>% rename(observed = value)) %>% 
@@ -319,17 +220,13 @@ bias_variance <- all_statistics %>%
             .groups = "keep") %>% 
   ungroup()
 
-colors_sim <- create_colors(c("copula_III", "marginal_II", "multivariate normal", "conditional distribution"), 
-                            c("turquoise", "dark yellow", "dark green", "pink"))
-
 bias_variance_plot <- bias_variance %>% 
-  filter(statistic %in% c("mean", "median", "sd", "covariance")) %>% 
-  filter(type != "marginal_II") %>% 
+  filter(statistic %in% c("mean", "sd", "covariance")) %>% 
   ggplot(aes(y = rBias, x = rRMSE, color = type, shape = type)) +
   geom_vline(xintercept = 0, linetype = 2, color = "grey65") +
   geom_hline(yintercept = 0, linetype = 2, color = "grey65") +
   geom_point() +
-  scale_color_manual(values = colors_sim[order(names(colors_sim))]) +
+  scale_color_manual(values = color_palette, limits = force) +
   facet_wrap(statistic ~ covariate, nrow = 3, dir = "v") +
   theme_bw()
 
@@ -358,36 +255,22 @@ simulation_performance <- all_stats %>%
   left_join(obs %>% rename(observed = value)) %>% 
   mutate(rel_value = (value - observed)/observed) %>% 
   mutate(diff_ratio = value/observed) %>% 
-  
   filter(data == "Full data") %>% 
-  
   ggplot(aes(y = diff_ratio, x = key, fill = type)) +
   geom_boxplot() +
   geom_hline(yintercept = c(1 - 0.2, 1 + 0.2), linetype = 2, color = "grey65") +
   geom_hline(yintercept = 1, linetype = 1, color = "black") +
   scale_x_discrete(guide = guide_axis(angle = 90)) +
-  scale_y_continuous(limits = c(NA, 3)) +
+  #scale_y_continuous(limits = c(NA, 3)) +
  # facet_wrap( ~ data, scales = "free_x", nrow = 2) +
   labs(x = NULL, y = "Relative error (simulated/observed)") +
-  scale_fill_manual(values = create_colors(c("copula_III", "marginal_II", "multivariate normal", "conditional distribution"), 
-                                           c("turquoise", "dark yellow", "dark green", "pink"))) +
+  scale_fill_manual(values = color_palette, limits = force) +
   theme_bw()
 
 pdf("results/figures/simulation_performance_3vars.pdf", height = 5, width = 6)
 print(simulation_performance)
 dev.off()
 
-results_plot_relative <- all_statistics %>% 
-  filter(statistic %in% c("mean", "median", "sd", "covariance")) %>% 
-  left_join(obs_results %>% rename(observed = value)) %>% 
-  mutate(rel_value = (value - observed)/observed) %>% 
-  ggplot(aes(y = rel_value, x = covariate, fill = type)) +
-  geom_boxplot() +
-  geom_hline(yintercept = c(-0.2, 0.2), linetype = 2, color = "grey65") +
-  geom_hline(yintercept = 0, linetype = 1, color = "black") +
-  scale_x_discrete(guide = guide_axis(angle = 90)) +
-  facet_wrap(statistic ~ . , scales = "free", nrow = 2, dir = "v") +
-  theme_bw()
 
 all_stats %>% 
   filter(statistic %in% c("mean", "covariance", "sd")) %>% 
@@ -402,5 +285,119 @@ all_stats %>%
   geom_hline(yintercept = c(1 - 0.2, 1 + 0.2), linetype = 2, color = "grey65") +
   geom_hline(yintercept = 1, linetype = 1, color = "black") +
   scale_x_discrete(guide = guide_axis(angle = 90)) +
+  scale_color_manual(values = color_palette, limits = force) +
   facet_wrap( ~ data, scales = "free_x", nrow = 2) +
   theme_bw()
+
+
+all_statistics %>% 
+  left_join(obs %>% rename(observed = value)) %>%
+  mutate(rel_value = (value - observed)/observed) %>% 
+  mutate(diff_ratio = value/observed) %>% 
+  group_by(statistic, covariate, type) %>% 
+  summarize(median_value = median(value), rel_error = mean(rel_value), diff_ratio = median(diff_ratio)) %>% 
+  ungroup() %>% 
+  mutate(error_prop = 1 - diff_ratio) %>% 
+  filter(statistic == "covariance") %>% 
+  arrange(type, covariate)
+
+#alternative
+simulations_3d <- read.csv("results/comparison/simulated_values_full_data.csv")
+simulated_data <- simulations_3d %>% 
+  filter(simulation != "observed") %>% 
+  mutate(`Body weight` = BW/1000) %>% 
+  rename(SCr = CREA, Age = age) %>% 
+  select(Age, BW, SCr, `Body weight`, simulation, simulation_nr)
+
+observed_data <- simulations_3d %>% 
+  filter(simulation == "observed") %>% 
+  mutate(`Body weight` = BW/1000) %>% 
+  rename(SCr = CREA, Age = age) %>% 
+  select(Age, BW, SCr, `Body weight`)
+
+plot_data_3d <- simulated_data %>% 
+  filter(simulation_nr %in% 1:4) %>% 
+  filter(!is.na(simulation))
+
+plot_chars <- list(geom_density2d(aes(color = simulation), bins = 20),
+                   #geom_point(aes(color = simulation), alpha = 0.5, stroke = 0, shape = 16),
+                   geom_density2d(data = observed_data,  alpha = 1, linetype = 2, color = "grey35", bins = 20),
+                   scale_y_continuous(expand = expansion(mult = c(0, 0.02)), limits = c(0, NA)),
+                   scale_x_continuous(expand = expansion(mult = c(0, 0.02)), limits = c(0, NA)),
+                   facet_grid(~ simulation),
+                   scale_color_manual(values = color_palette, limits = force),
+                   theme_bw(),
+                   theme(legend.position = "none", strip.text = element_text(margin = margin(b = 2, t = 2), size = 14),
+                         plot.margin = unit(c(0, 0, 0.1, 0), units = "cm"), strip.background = element_rect(fill = "white")))
+age_bw <- plot_data_3d %>% 
+  ggplot(mapping = aes(y = `Body weight`, x = Age)) +
+  plot_chars
+
+age_scr <-plot_data_3d %>% 
+  ggplot(mapping = aes(y = SCr, x = Age)) +
+  plot_chars +
+  theme(strip.text.x = element_blank())
+
+bw_scr <- plot_data_3d %>% 
+  ggplot(mapping = aes(y = SCr, x = `Body weight`)) +
+  plot_chars +
+  theme(strip.text.x = element_blank())
+
+
+pdf("results/figures/comparison_density_methods.pdf", width = 12, height = 8)
+age_bw/age_scr/bw_scr
+dev.off()
+
+
+
+abw <- observed_data %>% 
+  ggplot(aes(x = Age, y = `Body weight`)) +
+  geom_density2d(color = "black", bins = 10) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.01)), limits = c(-1, NA)) +
+  scale_x_continuous(expand = expansion(mult = c(0, 0.01)), limits = c(-50, NA)) +
+  labs(x = NULL, y = NULL) +
+  theme_bw() +
+  theme(panel.grid = element_blank(), axis.text = element_blank(), axis.ticks = element_blank(), panel.border = element_blank())
+abw
+
+asc <- observed_data %>% 
+  ggplot(aes(x = Age, y = `SCr`)) +
+  geom_density2d(color = "black", bins = 10) +
+  scale_y_continuous(expand = expansion(mult = c(0, 1.2))) +
+  scale_x_continuous(expand = expansion(mult = c(0, 0))) +
+  labs(x = NULL, y = NULL) +
+  theme_bw() +
+  theme(panel.grid = element_blank(), axis.text = element_blank(), axis.ticks = element_blank(), panel.border = element_blank())
+
+scbw <- observed_data %>% 
+  ggplot(aes(x = `Body weight`, y = `SCr`)) +
+  geom_density2d(color = "black", bins = 10) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0)), limits = c(-10, 100)) +
+  scale_x_continuous(expand = expansion(mult = c(0, 0)), limits = c(-1, 9)) +
+  labs(x = NULL, y = NULL) +
+  theme_bw() +
+  theme(panel.grid = element_blank(), axis.text = element_blank(), axis.ticks = element_blank(), panel.border = element_blank())
+
+abw + asc + scbw
+
+
+rs <- data_full %>% 
+  ggplot(aes(x = MDRD, y = `CG`)) +
+  geom_density2d(color = "black", bins = 10) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.01)), limits = c(-20, NA)) +
+  scale_x_continuous(expand = expansion(mult = c(0, 0.01)), limits = c(0, NA)) +
+  labs(x = NULL, y = NULL) +
+  theme_bw() +
+  theme(panel.grid = element_blank(), axis.text = element_blank(), axis.ticks = element_blank(), panel.border = element_blank())
+
+
+pdf("presentation/figures/densities_conceptual.pdf", width = 4.5, height = 1.6)
+abw + scbw + rs
+
+
+abw +  geom_point(color = "blue") + scbw + rs
+
+
+dev.off()
+
+
