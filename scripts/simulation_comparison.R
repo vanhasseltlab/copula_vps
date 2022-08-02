@@ -47,7 +47,7 @@ color_palette <- create_colors(c("observed", "copula", "marginal distribution", 
 ##### - Simulations - #####
 # Simulation settings
 #set type of simulation study: "full_data" or "random_split" 
-simulation_type <- "random_split"
+simulation_type <- "full_data"
 
 
 if (simulation_type == "full_data") {
@@ -183,18 +183,34 @@ all_sim <- sim_copula_III %>%
 write.csv(all_sim, file = paste0("results/comparison/simulated_values_", simulation_type, ".csv"), row.names = F)
 
 
+##plots
+all_statistics <- read.csv(file = paste0("results/comparison/results_", simulation_type, ".csv"))
+all_sim <- read.csv(file = paste0("results/comparison/simulated_values_", simulation_type, ".csv"))
+
+
 results_plot_relative <- all_statistics %>% 
   filter(statistic %in% c("mean", "sd", "covariance")) %>% 
   left_join(obs_results %>% rename(observed = value)) %>% 
-  mutate(rel_value = (value - observed)/observed) %>% 
+  mutate(statistic = gsub("sd", "standard deviation", statistic, fixed = TRUE)) %>% 
+  mutate(covariate = gsub("CREA", "SCr", covariate, fixed = TRUE)) %>% 
+  mutate(rel_value = (value - observed)/observed,
+         covariate = gsub("_", " - ", covariate, fixed = TRUE)) %>% 
   ggplot(aes(y = rel_value, x = covariate, fill = type)) +
+  geom_vline(xintercept = seq(0.5, 8.5, by = 1), color = "grey95") +
   geom_boxplot() +
   geom_hline(yintercept = c(-0.2, 0.2), linetype = 2, color = "grey65") +
   geom_hline(yintercept = 0, linetype = 1, color = "black") +
   scale_fill_manual(values = color_palette, limits = force) +
-  scale_x_discrete(guide = guide_axis(angle = 90)) +
+  labs(x = "Covariates", y = "Relative error", fill = "Method") +
+  scale_x_discrete(guide = guide_axis(angle = 90), expand = expansion(mult = c(0.25, 0.25))) +
   facet_grid(~ statistic , scales = "free") +
-  theme_bw()
+  theme_bw() +
+  theme(strip.background = element_rect(fill = "white"), panel.grid.minor.x = element_blank(),
+        panel.grid.major.x = element_blank())
+
+pdf("results/figures/simulation3d_performance.pdf", height = 4, width =7)
+print(results_plot_relative)
+dev.off()
 
 pdf(paste0("results/figures/simulation_statistics_", simulation_type,".pdf"), height = 7, width = 10)
 print(results_plot_relative)
@@ -210,6 +226,106 @@ plot_comparison_distribution_sim_obs_generic(sim_bootstrap, data_test, sim_nr = 
                                              plot_type = "both", title = "Bootstrap", pick_color = color_palette[c("bootstrap", "observed")])
 dev.off()
 
+#alternative
+results_plot_relative <- all_statistics %>% 
+  filter(statistic %in% c("mean", "sd", "covariance")) %>% 
+  left_join(obs_results %>% rename(observed = value)) %>% 
+  mutate(statistic = gsub("sd", "standard deviation", statistic, fixed = TRUE)) %>% 
+  mutate(covariate = gsub("CREA", "SCr", covariate, fixed = TRUE)) %>% 
+  mutate(rel_value = (value - observed)/observed,
+         covariate = gsub("_", " - ", covariate, fixed = TRUE)) %>% 
+  ggplot(aes(y = rel_value, x = covariate, color = type)) +
+  geom_vline(xintercept = seq(0.5, 8.5, by = 1), color = "grey95") +
+  geom_boxplot(fill = "white") +
+  geom_hline(yintercept = c(-0.2, 0.2), linetype = 2, color = "grey65") +
+  geom_hline(yintercept = 0, linetype = 1, color = "black") +
+  scale_color_manual(values = color_palette, limits = force) +
+  labs(x = "Covariates", y = "Relative error", color = "Method") +
+  scale_x_discrete(guide = guide_axis(angle = 90), expand = expansion(mult = c(0.25, 0.25))) +
+  facet_grid(~ statistic , scales = "free") +
+  theme_bw() +
+  theme(strip.background = element_rect(fill = "white"), panel.grid.minor.x = element_blank(),
+        panel.grid.major.x = element_blank())
+
+#table with results
+summary_stats <- all_statistics %>% 
+  left_join(obs_results %>% rename(observed = value)) %>%
+  mutate(rel_value = (value - observed)/observed) %>% 
+  mutate(diff_ratio = value/observed) %>% 
+  group_by(statistic, covariate, type) %>% 
+  summarize(median_value = median(value), rel_error = mean(rel_value), 
+            diff_ratio = median(diff_ratio), RMSE = sqrt(mean(rel_value^2)),
+            bias = mean(rel_value)) %>% 
+  ungroup() %>% 
+  mutate(error_prop = 1 - diff_ratio) %>% 
+  arrange(type, covariate) %>% 
+  mutate(cov1 = gsub("\\_.*", "", covariate),
+         cov2 = gsub("\\w+.\\_", "", covariate))
+
+
+#results similar to Smania and Jonsson
+plot_covariance_SJ <- summary_stats %>% 
+  pivot_longer(cols = c(bias, RMSE), names_to = "error_type", values_to = "error") %>% 
+  filter(statistic == "covariance") %>% 
+  ggplot(aes(y = cov1, x = cov2)) +
+  geom_tile(aes(fill = error)) +
+  geom_text(aes(label = round(error, 2))) +
+  scale_fill_gradientn(colours = c("#001158", "white", "#001158"), limits = c(-0.3, 0.3)) +
+  scale_x_discrete(expand = expansion(mult = c(0, 0))) +
+  scale_y_discrete(expand = expansion(mult = c(0, 0))) +
+  facet_grid(error_type ~ type) +
+  theme_bw() +
+  theme(strip.background = element_rect(fill = "white"), panel.grid.minor.x = element_blank(),
+        panel.grid.major.x = element_blank(), panel.grid = element_blank())
+
+plot_marginal_SJ <- summary_stats %>% 
+  pivot_longer(cols = c(bias, RMSE), names_to = "error_type", values_to = "error") %>% 
+  filter(statistic != "covariance") %>% 
+  ggplot(aes(y = statistic, x = covariate)) +
+  geom_tile(aes(fill = error)) +
+  geom_text(aes(label = round(error, 2))) +
+  scale_fill_gradientn(colours = c("#001158", "white", "#001158"), limits = c(-1, 1)) +
+  scale_x_discrete(expand = expansion(mult = c(0, 0))) +
+  scale_y_discrete(expand = expansion(mult = c(0, 0))) +
+  facet_grid(error_type ~ type) +
+  theme_bw() +
+  theme(strip.background = element_rect(fill = "white"), panel.grid.minor.x = element_blank(),
+        panel.grid.major.x = element_blank(), panel.grid = element_blank())
+
+pdf("results/figures/SJ_plots.pdf", width = 10, height = 6)
+print(plot_marginal_SJ)
+print(plot_covariance_SJ)
+dev.off()
+
+
+summary_stats %>% 
+  filter(statistic != "covariance") %>% 
+  ggplot(aes(y = statistic, x = covariate)) +
+  geom_tile(aes(fill = bias)) +
+  geom_text(aes(label = round(bias, 2))) +
+  scale_fill_gradientn(colours = c("#f46e32", "white", "#f46e32"), limits = c(-1.1, 1.1)) +
+  scale_x_discrete(expand = expansion(mult = c(0, 0))) +
+  scale_y_discrete(expand = expansion(mult = c(0, 0))) +
+  facet_grid( ~ type) +
+  theme_bw() +
+  theme(strip.background = element_rect(fill = "white"), panel.grid.minor.x = element_blank(),
+        panel.grid.major.x = element_blank(), panel.grid = element_blank())
+
+summary_stats %>% 
+  filter(statistic == "covariance") %>% 
+  ggplot(aes(y = cov1, x = cov2)) +
+  geom_tile(aes(fill = RMSE)) +
+  geom_text(aes(label = round(RMSE, 2))) +
+  scale_fill_gradientn(colours = c("#f46e32", "white", "#f46e32"), limits = c(-1.1, 1.1)) +
+  scale_x_discrete(expand = expansion(mult = c(0, 0))) +
+  scale_y_discrete(expand = expansion(mult = c(0, 0))) +
+  facet_grid(~ type) +
+  theme_bw() +
+  theme(strip.background = element_rect(fill = "white"), panel.grid.minor.x = element_blank(),
+        panel.grid.major.x = element_blank(), panel.grid = element_blank())
+
+
+#################
 
 
 bias_variance <- all_statistics %>% 
@@ -290,16 +406,7 @@ all_stats %>%
   theme_bw()
 
 
-all_statistics %>% 
-  left_join(obs %>% rename(observed = value)) %>%
-  mutate(rel_value = (value - observed)/observed) %>% 
-  mutate(diff_ratio = value/observed) %>% 
-  group_by(statistic, covariate, type) %>% 
-  summarize(median_value = median(value), rel_error = mean(rel_value), diff_ratio = median(diff_ratio)) %>% 
-  ungroup() %>% 
-  mutate(error_prop = 1 - diff_ratio) %>% 
-  filter(statistic == "covariance") %>% 
-  arrange(type, covariate)
+
 
 #alternative
 simulations_3d <- read.csv("results/comparison/simulated_values_full_data.csv")

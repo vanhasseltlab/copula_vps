@@ -36,8 +36,8 @@ plot_comparison_distribution_sim_obs_generic <- function(sim_data, obs_data, var
     }
     if (plot_type != "points") {
       density_plots[[combination]] <- ggplot(mapping = aes_string(x = combination_variables[i, 1], y = combination_variables[i, 2])) +
-        geom_density2d(data = part_data[part_data$type == "simulated", ], color = pick_color[1]) +
-        geom_density2d(data = part_data[part_data$type == "observed", ],  alpha = 1, color = pick_color[2], linetype = 2) +
+        geom_density2d(data = part_data[part_data$type == "simulated", ], color = pick_color[1], bins = 20) +
+        geom_density2d(data = part_data[part_data$type == "observed", ],  alpha = 1, color = pick_color[2], linetype = 2, bins = 20) +
         scale_y_continuous(expand = expansion(mult = c(0, 0))) +
         scale_x_continuous(expand = expansion(mult = c(0, 0))) +
         theme_bw() +
@@ -53,6 +53,8 @@ plot_comparison_distribution_sim_obs_generic <- function(sim_data, obs_data, var
       return(point_plots)
     }
     else if (plot_type == "both") {
+      names(density_plots) <- paste0("density_",names(density_plots))
+      names(point_plots) <- paste0("point_", names(point_plots))
       return(c(density_plots, point_plots))
     }
   }

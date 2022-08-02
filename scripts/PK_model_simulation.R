@@ -44,12 +44,13 @@ df_pk_summary <- df_pk %>%
   group_by(time, type) %>% 
   summarize(median = median(conc), p_high = quantile(conc, 0.975), 
             p_low = quantile(conc, 0.025), p_25 = quantile(conc, 0.25), 
-            p_75 = quantile(conc, 0.75), max = quantile(conc, 0.99), min = quantile(conc, 0.01)) %>% ungroup() %>% 
+            p_75 = quantile(conc, 0.75), max = quantile(conc, 0.99), 
+            min = quantile(conc, 0.01), mean = mean(conc)) %>% ungroup() %>% 
   mutate(Type = factor(str_to_title(type), levels = c("Observed", "Marginal", "Copula", "Conditional")))
 
 # plot
 plot_lines_weight_full <- df_pk %>% 
-  mutate(Type = factor(str_to_title(type), levels = c("Observed", "Marginal", "Copula"))) %>% 
+  mutate(Type = factor(str_to_title(type), levels = c("Observed", "Marginal", "Copula", "Conditional"))) %>% 
   filter(id %in% 1:nrow(data_grimsley)) %>% 
   ggplot(aes(x = time/60)) +
   geom_line(aes(y = conc, group = id, color = wgt), alpha = 0.3) +
@@ -134,6 +135,7 @@ print(plot_lines_weight_pres +
         scale_color_gradientn(colours = c("#f46e32", "#f46e32", "#8592BC", "#001158"), trans = "log10"))
 dev.off()
 
+
 #Typical PK
 plot_typical_PK <- df_pk_summary_24 %>% 
   filter(type == "observed") %>% 
@@ -149,9 +151,67 @@ pdf(file = "presentation/figures/line_typical_pk_Grimsey.pdf", width = 2.7, heig
 print(plot_typical_PK)
 dev.off()
 
+plot_one_PK <- df_pk_summary_24 %>% 
+  filter(type == "observed") %>% 
+  ggplot(aes(x = time/60)) +
+  geom_ribbon(aes(ymin = p_25,ymax = p_75), fill = "grey80") +
+  geom_line(aes(y = median), color = "grey36", size = 1.5) +
+  scale_x_continuous(expand = expansion(mult = c(0, 0)), breaks = c(seq(0, 20, 5), 24), limits = c(0, 24)) + 
+  scale_y_continuous(expand = expansion(mult = c(0, 0.05))) +
+  labs(x = "Time", y = "Concentration") +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank(), axis.ticks = element_blank(), axis.text = element_blank())
 
-#AUC comparison
+plot_data_PK <- plot_data %>% 
+  filter(time %in% c(60, 120, 600, 1400)) %>% 
+  filter(id %in% 1:10) %>% 
+  filter(Type == "copula") %>% 
+  ggplot(aes(y = conc, x = time/60)) +
+  stat_summary(fun = mean, geom = "line", color = "grey49", size = 1.5, linetype = 1) +
+  geom_point()  +
+  scale_x_continuous(expand = expansion(mult = c(0, 0)), breaks = c(seq(0, 20, 5), 24), limits = c(0, 24)) + 
+  scale_y_continuous(expand = expansion(mult = c(0, 0.05))) +
+  labs(x = "Time", y = "Concentration") +
+  labs(color = "Weight (kg)") +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank(), axis.ticks = element_blank(), axis.text = element_blank())
 
+
+col_pats <- read.csv("example/simulated_data_conceptual_figure.csv") %>% 
+  arrange(size) %>% 
+  mutate(id = 1:20)
+
+plot_model_PK_variation <- plot_data %>% 
+  filter(id %in% 1:20) %>% 
+  left_join(col_pats) %>% 
+  filter(Type == "copula") %>% 
+  ggplot(aes(y = conc, x = time/60, color = color_hexa2)) +
+  geom_ribbon(data = df_pk_summary_24 %>% filter(type == "copula"), 
+              aes(ymin = p_low, ymax = p_high, x = time/60), fill = "grey80", inherit.aes = F) +
+  geom_line(aes(group = id),size = 1.5)  +
+  scale_color_identity() +
+  scale_x_continuous(expand = expansion(mult = c(0, 0)), breaks = c(seq(0, 20, 5), 24), limits = c(0, 24)) + 
+  scale_y_continuous(expand = expansion(mult = c(0, 0.05))) +
+  labs(x = "Time", y = "Concentration") +
+  labs(color = "Weight (kg)") +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank(), axis.ticks = element_blank(), axis.text = element_blank())
+
+pdf(file = "presentation/figures/line_pks_conceptual.pdf", width = 3.57, height = 2)
+print(plot_one_PK + labs(x = NULL, y = NULL))
+print(plot_data_PK + labs(x = NULL, y = NULL))
+print(plot_model_PK_variation + labs(x = NULL, y = NULL))
+
+print(plot_one_PK)
+print(plot_data_PK)
+print(plot_model_PK_variation)
+dev.off()
+
+
+
+
+#######
+#AUC vs weight pointplots
 AUC_df <- df_pk %>% 
   group_by(id, type, wgt, scr) %>% 
   summarise(AUC0_24 = AUC(x = time, y = conc, from = 0, to = 24*60, 
@@ -161,7 +221,56 @@ AUC_df <- df_pk %>%
             AUC48_72 = AUC(x = time, y = conc, from = 48*60, to = 72*60, 
                            method = "trapezoid", na.rm = FALSE)) %>% 
   ungroup() %>% 
-  pivot_longer(c(AUC0_24, AUC24_48, AUC48_72), names_to = "dosing_time", values_to = "AUC", names_prefix ="AUC")
+  pivot_longer(c(AUC0_24, AUC24_48, AUC48_72), names_to = "dosing_time", values_to = "AUC", names_prefix ="AUC") %>% 
+  mutate(Type = recode(type, marginal = "marginal\ndistribution", conditional = "conditional\ndistribution")) %>% 
+  mutate(Type = factor(Type, levels = c("observed", "copula", "marginal\ndistribution", "conditional\ndistribution")))
+
+
+plot_auc_weight <- AUC_df %>% 
+  filter(dosing_time == "0_24") %>% 
+  filter(type != "conditional") %>% 
+  ggplot(aes(x = wgt, y = AUC, color = Type)) +
+  geom_point(alpha = 0.7, shape = 16) +
+  labs(x = "Body weight (kg)") +
+  scale_color_manual(values = create_colors(c("copula", "marginal\ndistribution", "observed", "conditional\ndistribution"),
+                                            c("turquoise", "dark yellow", "grey", "pink")), limits = force) +
+  facet_grid(~ Type) +
+  theme_bw()
+
+pdf(file = "results/figures/PK_AUC_weight_scatter.pdf", width = 7, height = 3)
+print(plot_auc_weight)
+dev.off()
+###
+# geom_ribbon(data=subset(x, 2 <= x & x <= 3), 
+#             aes(ymin=twox,ymax=x2), fill="blue", alpha=0.5) 
+try_new_plot <- df_pk_summary_24 %>% 
+  filter(Type != "observed") %>% 
+  ggplot(aes(x = time/60, color = Type)) +
+  geom_line(aes(y = median, linetype = "Median"), show.legend = F) +
+ 
+  geom_ribbon(data = df_pk_summary_24 %>% 
+                filter(Type == "observed"), aes(ymin = p_low, ymax = p_high), fill = "grey95", color = "white") +
+  geom_ribbon(data = df_pk_summary_24 %>% 
+                filter(Type == "observed"), aes(ymin = p_25, ymax = p_75), fill = "grey85", color = "white") +
+  geom_line(data = df_pk_summary_24 %>% 
+              filter(Type == "observed"), aes(y = median), color = "black") +
+  geom_line(aes(y = p_25, linetype = "Quartiles"), show.legend = F) +
+  geom_line(aes(y = p_75, linetype = "Quartiles"), show.legend = F) +
+  geom_line(aes(y = p_high, linetype = "95% Quantiles"), show.legend = F) +
+  geom_line(aes(y = p_low, linetype = "95% Quantiles"), show.legend = F) +
+  geom_line(aes(y = median, linetype = "Median"), show.legend = F) +
+  scale_linetype_manual(values = c(1, 2, 3), breaks = c("Median", "Quartiles", "95% Quantiles"), name = NULL) + 
+  scale_color_manual(values = create_colors(c("copula", "marginal\ndistribution", "observed"),
+                                            c("turquoise", "dark yellow", "grey"))) +
+  theme_bw() 
+
+pdf("results/figures/PK_shaded_area.pdf", width = 4, height = 4)
+print(try_new_plot)
+dev.off()
+
+#AUC comparison
+
+
 AUC_df %>% 
   ggplot(aes(x = AUC, fill = type)) +
   geom_density(alpha = 0.3) +
@@ -173,9 +282,10 @@ AUC_df %>% filter(dosing_time == "0_24") %>% group_by(type) %>%
             cor_scr_AUC = round(cor(scr, AUC), 3)) %>% as.data.frame
 
 AUC_df %>% filter(dosing_time == "0_24") %>% 
-  ggplot(aes(x = wgt, y = AUC)) +
+  ggplot(aes(x = wgt, y = AUC, color = type)) +
   geom_point() +
-  geom_smooth(se = F, color = "red") +
+  scale_color_manual(values = create_colors(c("copula", "marginal", "observed", "conditional"),
+                                            c("turquoise", "dark yellow", "grey", "pink"))) +
   facet_grid(~ type) +
   theme_bw()
 
@@ -191,7 +301,7 @@ AUC_df %>% filter(type != "observed") %>%
   ggplot(aes(y = AUC, fill = type, x = dosing_time)) +
   geom_boxplot(data = AUC_df %>% filter(type == "observed"), alpha = 1) +
   geom_boxplot(alpha = 0.5) +
-  #scale_fill_manual(values = c("#FC6257", "#00AF2A", "grey65")) +
+  scale_fill_manual(values = c("#FC6257", "#00AF2A",  "blue", "grey65")) +
   
   theme_bw()
 
@@ -256,5 +366,5 @@ df_corr %>%
   theme_bw()
 
 df_corr %>% group_by(type) %>% 
-  summarize(corr_weight = mean(corr_weight), corr_scr = mean(corr_scr))
+  summarize(corr_weight = mean(corr_weight), corr_scr = mean(corr_scr)) %>% View
   

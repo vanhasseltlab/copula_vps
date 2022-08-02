@@ -88,20 +88,22 @@ pairs_copula_data(copula_long$uniform_data)
 plot_comparison_distribution_sim_obs_generic(sim_data = df_sim$parameters, obs_data = copula_long$original_data, plot_type = "both")
 dev.off()
 
+plot_comparison_distribution_sim_obs_generic(sim_data = df_sim$parameters, obs_data = copula_long$original_data, plot_type = "both", 
+                                             variables = c("b0_Albumin", "b1_Albumin", "b2_Albumin"), pick_color = c("#3ABAC1", "#969696"))
 
+create_colors(selected = "grey")
 
 #performance
 sim_error %>% 
-  ggplot(aes(x = stat, y = ratio_diff)) +
+  ggplot(aes(x = stat, y = rel_error)) +
   geom_boxplot() +
-  geom_hline(yintercept = 1, color = "grey35") +  
-  geom_hline(yintercept = c(1-0.2, 1+0.2), color = "grey35", linetype = 2) +  
+  geom_hline(yintercept = 0, color = "grey35") +  
+  geom_hline(yintercept = c(-0.2, 0.2), color = "grey35", linetype = 2) +  
   theme_bw()
 
 
 sim_error %>% group_by(stat) %>% 
-  summarize(median = median(ratio_diff), mean = mean(ratio_diff),
-            median_error = 1 - median(ratio_diff), mean_error = 1 - mean(ratio_diff))
+  summarize(median = median(rel_error), mean = mean(rel_error))
 
 
 

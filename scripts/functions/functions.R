@@ -10,11 +10,14 @@ get_statistics <- function(data_set, columns = NULL) {
     c(mean = mean(x), median = median(x), sd = sd(x), min = min(x), max = max(x))
   }
   covariance_mat <- cov(data_set[, columns], use = "pairwise.complete.obs")
+  cor_mat <- cor(data_set[, columns], use = "pairwise.complete.obs")
   univariate <- as.data.frame(apply(data_set[, columns], 2, stats))
   
   multivariate <- reshape2::melt(replace(covariance_mat, lower.tri(covariance_mat, TRUE), NA), na.rm = TRUE) %>% 
     mutate(statistic = "covariance", covariate = paste(Var1, Var2, sep = "_")) %>% 
-    dplyr::select(statistic, covariate, value)
+    dplyr::select(statistic, covariate, value) %>% 
+    bind_rows(reshape2::melt(replace(cor_mat, lower.tri(cor_mat, TRUE), NA), na.rm = TRUE) %>% 
+                mutate(statistic = "correlation", covariate = paste(Var1, Var2, sep = "_")))
   
   long_format <- univariate %>% 
     rownames_to_column("statistic") %>% 
@@ -93,7 +96,7 @@ check_fit_plot <- function(x, marg_density) {
 
 
 #create color data frame
-create_colors <- function(labels = NULL, selected = 1:length(labels)) {
+create_colors <- function(labels = NULL, selected = 1:length(labels), demo = FALSE) {
   colors <- c("#F3D4DF", "#E7AAC0", "#DB7FA1", "#CF5581", "#C32A62", "#B70043", "#1784E4", 
               "#1784E4", "#E4AB01", "#04715F", "#B52807", "#C3C3C3", "#3ABAC1", "#C37121", 
               "#26B72C", "#8DD2FF", "#9DF7A1", "#F7F18B", "#F3A492", "#083A9C", "#DB7FA1",
@@ -106,8 +109,10 @@ create_colors <- function(labels = NULL, selected = 1:length(labels)) {
   if (!is.null(labels)) {
     names(color_palette) <- labels[1:length(selected)]
   }
-  return(color_palette)
   
+  if (!demo) {
+    return(color_palette)
+  }
   
   demo_colors <- function(color_df, blocks) {
     color_plot <- color_df %>% 
@@ -121,5 +126,7 @@ create_colors <- function(labels = NULL, selected = 1:length(labels)) {
       theme_void()
     return(color_plot)
   }
+  
+  return(demo_colors(data.frame(color = color_palette, font.color = "black"), c(13, 2)))
 }
 

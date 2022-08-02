@@ -10,7 +10,7 @@ library(tidyverse)
 # example observed data:
 concept_data <- read.csv("example/simulated_data_conceptual_figure.csv", row.names = 1)
 
-point_plot_intro <- concept_data %>% left_join(color_translation) %>% 
+point_plot_intro <- concept_data %>% 
   ggplot(aes(x = size, y = color)) +
   geom_point(aes(color = color_hexa2, fill = color_hexa, size = size), 
              show.legend = FALSE, alpha = 0.8, shape = 16) +
@@ -41,10 +41,8 @@ point_plot_intro_density <- contour_sim %>%
   ggplot(aes(x = size, y = color_raw)) +
   geom_density_2d(show.legend = FALSE, color = "grey", linetype = 5, h = 4) +
   scale_x_continuous(limits = range(concept_data$size)*c(0.90, 1.05), expand = expansion(mult = c(0, 0))) +
-  scale_y_continuous(limits = range(concept_data$color)*c(0.6, 1.07), expand = expansion(mult = c(0, 0)), name = "color") +
-  
-  geom_point(data = concept_data, aes(color = color_hexa2, fill = color_hexa, size = size, y = color), 
-             show.legend = FALSE, alpha = 0.8, shape = 16) +
+  scale_y_continuous(limits = range(concept_data$color)*c(0.6, 1.07), expand = expansion(mult = c(0, 0))) +
+  labs(y = "color") +
   scale_color_identity() +
   scale_fill_identity() +
   
@@ -55,6 +53,8 @@ point_plot_intro_density <- contour_sim %>%
 cairo_pdf(file = "example/person_plot.pdf", width = 2.4, height = 2.4, onefile = T)
 print(point_plot_intro)
 print(point_plot_intro_density)
+print(point_plot_intro_density + geom_point(data = concept_data, aes(color = color_hexa2, fill = color_hexa, size = size, y = color), 
+                                         show.legend = FALSE, alpha = 0.8, shape = 16))
 dev.off()
 
 #new simulated data
@@ -75,8 +75,8 @@ point_plot_intro_simulated <- contour_sim %>%
   ggplot(aes(x = size, y = color_raw)) +
   geom_density_2d(show.legend = FALSE, color = "grey", linetype = 5, h = 4) +
   scale_x_continuous(limits = range(concept_data$size)*c(0.90, 1.05), expand = expansion(mult = c(0, 0))) +
-  scale_y_continuous(limits = range(concept_data$color)*c(0.6, 1.07), expand = expansion(mult = c(0, 0)), name = "color") +
-  
+  scale_y_continuous(limits = range(concept_data$color)*c(0.6, 1.07), expand = expansion(mult = c(0, 0))) +
+  labs(y = "color") +
   geom_point(data = simulated_data, aes(color = color_hexa2, fill = color_hexa, size = size), 
              show.legend = FALSE, alpha = 0.8, shape = 15) +
   scale_color_identity() +
@@ -85,12 +85,110 @@ point_plot_intro_simulated <- contour_sim %>%
   theme_bw() +
   theme(axis.title = element_text(size = 12), panel.grid = element_blank(), axis.ticks = element_blank(), axis.text = element_blank())
 
-cairo_pdf(file = "example/person_plot.pdf", width = 2.4, height = 2.4, onefile = T)
+cairo_pdf(file = "example/person_plot.pdf", width = 2.8, height = 2, onefile = T)
 print(point_plot_intro)
 print(point_plot_intro_density)
 print(point_plot_intro_simulated)
+
+print(point_plot_intro + labs(x = NULL, y = NULL))
+print(point_plot_intro_density + labs(x = NULL, y = NULL))
+print(point_plot_intro_simulated + labs(x = NULL, y = NULL))
+
+print(point_plot_intro + labs(x = "covariate A", y = "covariate B"))
+print(point_plot_intro_density + labs(x = "covariate A", y = "covariate B"))
+print(point_plot_intro_simulated + labs(x = "covariate A", y = "covariate B"))
 dev.off()
 
+#Marginal
+set.seed(12345) #Not the right seed for the data example!!
+test_sim_marg <- as.data.frame(rbicop(n = 50, family = "indep"))
+
+#okayish
+simulated_data_marg <- data.frame(color = round(qunif(test_sim_marg[, 1], min = 1, max = 10)),
+                             color_raw = qunif(test_sim_marg[, 1], min = 1, max = 10),
+                             size = qnorm(test_sim_marg[, 2], mean = 20, sd = 5)) %>% 
+  left_join(color_translation)
+
+#worse
+simulated_data_marg <- data.frame(color = round(qunif(test_sim_marg[, 1], min = 1, max = 10)),
+                                  color_raw = qunif(test_sim_marg[, 1], min = 1, max = 10),
+                                  size = qunif(test_sim_marg[, 2], min = 8.3, max = 28)) %>% 
+  left_join(color_translation)
+
+point_plot_intro_simulated_marg <- contour_sim %>%
+  ggplot(aes(x = size, y = color_raw)) +
+  geom_density_2d(show.legend = FALSE, color = "grey", linetype = 5, h = 4) +
+  scale_x_continuous(limits = range(concept_data$size)*c(0.90, 1.05), expand = expansion(mult = c(0, 0))) +
+  scale_y_continuous(limits = range(concept_data$color)*c(0.6, 1.07), expand = expansion(mult = c(0, 0))) +
+  labs(y = "color") +
+  geom_point(data = simulated_data_marg, aes(color = color_hexa2, fill = color_hexa, size = size), 
+             show.legend = FALSE, alpha = 0.8, shape = 15) +
+  scale_color_identity() +
+  scale_fill_identity() +
+  
+  theme_bw() +
+  theme(axis.title = element_text(size = 12), panel.grid = element_blank(), axis.ticks = element_blank(), axis.text = element_blank())
+
+
+cairo_pdf(file = "example/person_plot.pdf", width = 2.8, height = 2, onefile = T)
+print(point_plot_intro + labs(x = "covariate A", y = "covariate B"))
+print(point_plot_intro_density + labs(x = "covariate A", y = "covariate B"))
+print(point_plot_intro_simulated + labs(x = "covariate A", y = "covariate B"))
+print(point_plot_intro_simulated_marg + labs(x = "covariate A", y = "covariate B"))
+print(point_plot_intro_density + geom_point(data = concept_data, aes(color = color_hexa2, fill = color_hexa, size = size, y = color), 
+                                            show.legend = FALSE, alpha = 0.8, shape = 16) + labs(x = "covariate A", y = "covariate B"))
+dev.off()
+
+library(VennDiagram)
+list("marginal distribution", "multivariate normal distribution", "conditional distribution", "bootstrap", "copula")
+
+dependency <- c("multivariate normal distribution", "conditional distribution", "bootstrap", "copula")
+dist_based <- c("marginal distribution", "multivariate normal distribution", "copula")
+new_vps <- c("marginal distribution", "multivariate normal distribution", "conditional distribution", "copula")
+flexible <- c("marginal distribution", "conditional distribution", "bootstrap", "copula")
+list_venn <- list(dependency = dependency, new_vps = new_vps, dist_based = dist_based, flexible = flexible)
+
+venn_diag <- venn.diagram(list_venn, output = T, filename = NULL)
+
+overlaps <- calculate.overlap(list_venn)
+overlaps <- rev(overlaps)
+
+posOverlap <- as.numeric (gsub ("a","", (names (overlaps))))
+for (i in 1:length(overlaps)){
+  pos <- posOverlap [i]
+  venn_diag[[pos+8]]$label <- paste(overlaps[[i]], collapse = "\n")
+}
+
+grid.newpage()
+grid.draw(venn_diag)
+
+###
+source("scripts/functions/functions.R")
+
+data_sharing <- c("marginal distribution", "multivariate normal distribution", "copula")
+correct_specification <- c("conditional distribution", "bootstrap", "copula")
+
+list_venn <- list(`Data sharing` = data_sharing, `Correct distribution` = correct_specification)
+
+
+venn_diag <- venn.diagram(list(`Data sharing` = data_sharing, `Correct distribution` = correct_specification), 
+                          output = T, filename = NULL, cat.pos = c(0, 0), disable.logging = T, 
+                          fill = create_colors(selected = c("light blue", "dark green")),
+                          lty = 'blank')
+
+overlaps <- list(a1 = c("- marginal distribution", "- multivariate normal \ndistribution"), 
+                 a2 = c("- conditional distribution", "- bootstrap"), a3 = "- copula")
+
+for (i in 1:length(overlaps)){
+  venn_diag[[i + 4]]$label <- paste(overlaps[[i]], collapse = "\n")
+}
+
+cairo_pdf(file = "example/venn_methods.pdf", width = 5, height = 5, onefile = T)
+grid.newpage()
+grid.draw(venn_diag)
+dev.off()
+
+########################
 
 set.seed(123)
 test_sim <- as.data.frame(rbicop(n = 20, family = "gumbel", 0, parameters = c(3)))
@@ -159,3 +257,7 @@ emoji::emoji("bacteria")
 
 
 "\uFE0F"
+
+
+#PK curve:
+

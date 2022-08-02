@@ -9,6 +9,7 @@ estimate_vinecopula_from_data <- function(dat, variables_of_interest = NULL,
   estimate_spline_marginal <- function(covariate, xmin = NaN) {
     covariate <- covariate[!is.na(covariate)]
     param <- kde1d(covariate, xmin = xmin)
+    param$x <- NULL
     marg <- list(pdf = function(u) qkde1d(u, param),
                  pit = function(x) pkde1d(x, param),
                  rdist = function(n) rkde1d(n, param),
@@ -81,19 +82,13 @@ estimate_vinecopula_from_data <- function(dat, variables_of_interest = NULL,
   vine_coefs <- vinecop(dat_unif, ...)
   print("End copula estimation")
   
-  if (keep_data) {
   vine_output <- list(vine_copula = vine_coefs, marginals = marginals, 
-                      uniform_data = dat_unif, original_data = dat_out, 
                       polynomial = polynomial, 
                       names = c(ID_name = ID_name, time_name = time_name), 
                       time_range = time_range, 
                       variables_of_interest = variables_of_interest)
-  } else {
-    vine_output <- list(vine_copula = vine_coefs, marginals = marginals, 
-                        polynomial = polynomial, 
-                        names = c(ID_name = ID_name, time_name = time_name), 
-                        time_range = time_range, 
-                        variables_of_interest = variables_of_interest)
+  if (keep_data) {
+    vine_output <- append(vine_output, list(original_data = dat_out, uniform_data = dat_unif), after = 3)
   }
   
   class(vine_output) <- "estVineCopula"
