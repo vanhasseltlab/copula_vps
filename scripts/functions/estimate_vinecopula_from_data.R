@@ -19,7 +19,6 @@ estimate_vinecopula_from_data <- function(dat, variables_of_interest = NULL,
   }
   
   
-  
   if(is.null(variables_of_interest)) {
     #create set of variables between which the copula is made
     variables_of_interest <- setdiff(colnames(dat), c(ID_name, time_name))

@@ -2,8 +2,10 @@
 # Pregnancy data
 # Patel, J. P. et al. Circulation 128, 1462–1469 (2013).
 
+##### - Libraries - #####
 library(tidyverse)
 
+#### Data ####
 #read in pregnancy data
 data_pregnancy_raw <- read.csv("data/Jig - pregnancy file August 2012 minus coag info.csv", 
                                row.names = NULL, na.strings = c("")) %>% 
@@ -28,5 +30,3 @@ data_reduced <- data_reduced[-remove_rows, ]
 
 write.csv(data_reduced, file = "data/clean/pregnancy_reduced.csv", row.names = FALSE,
           quote = FALSE)
-
-##

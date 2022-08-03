@@ -22,19 +22,30 @@ get_statistics <- function(data_set, columns = NULL) {
   long_format <- univariate %>% 
     rownames_to_column("statistic") %>% 
     pivot_longer(-statistic, names_to = "covariate") %>% 
-    bind_rows(multivariate)
+    bind_rows(multivariate) %>% 
+    mutate(Var1 = as.character(Var1), Var2 = as.character(Var2))
+    
   
   return(long_format)
 }
 
 #calculate statistics for comparison for each set of simulations
-get_statistics_multiple_sims <- function(data_set, m, n_statistics, columns = NULL, type = NULL) {
-  full_results <- as.data.frame(matrix(nrow = m*n_statistics, ncol = 3))
-  names(full_results) <- c("statistic", "covariate", "value")
+get_statistics_multiple_sims <- function(data_set, m, columns = NULL, type = NULL) {
+  data_set <- data_set[, colSums(is.na(data_set)) != nrow(data_set)]
+  
+  if (is.null(columns)) {
+    columns <- setdiff(colnames(data_set), "simulation_nr")
+  }
+  n_statistics <- length(columns)*5  + 2*choose(length(columns), 2)
+  full_results <- as.data.frame(matrix(nrow = m*n_statistics, ncol = 5))
+  names(full_results) <- c("statistic", "covariate", "value", "cov1", "cov2")
   full_results$simulation_nr <- rep(1:m, each = n_statistics)
+  
+  
+  
   for(i in unique(data_set$simulation_nr)) {
-    sim_results <- get_statistics(data_set[data_set$simulation_nr == i, ], columns = c("age", "BW", "CREA"))
-    full_results[full_results$simulation_nr == i, c("statistic", "covariate", "value")] <- sim_results
+    sim_results <- get_statistics(data_set[data_set$simulation_nr == i, ], columns = columns)
+    full_results[full_results$simulation_nr == i, c("statistic", "covariate", "value",  "cov1", "cov2")] <- sim_results
   }
   if (!is.null(type)) {
     full_results$type <- type

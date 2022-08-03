@@ -1,14 +1,19 @@
-#mimic data
+#MIMIC data analysis -> run on machine with large memory!
+cat("start script \n")
+##### - Libraries - #####
 library(tidyverse)
 library(ggside)
 library(patchwork)
+library(kde1d)
+library(rvinecopulib)
 
-
+##### - Functions - #####
 source("scripts/functions/estimate_vinecopula_from_data.R")
 source("scripts/functions/functions.R")
 source("scripts/functions/plot_distributions.R")
 
 
+##### - Data - #####
 #Load and clean data
 load("data/MIMIC/data_wide_127vars.Rdata")
 item_selection <- read.csv("data/MIMIC/labs cvh.csv")
@@ -44,48 +49,30 @@ start_time <- Sys.time()
 cop_mimic <- estimate_vinecopula_from_data(dat = cop_data_MIMIC, 
                                            variables_of_interest = names(cop_data_MIMIC), 
                                            keep_data = FALSE, family_set = "parametric", cores = 40)
-save(cop_mimic, file = "results/MIMIC/copula_mimic_allvar_53kpatients_filtered_logtransformed.Rdata")
+save(cop_mimic, file = "results/copula_mimic.Rdata")
 end_time <- Sys.time()
-print(end_time - start_time)
-
+#print(end_time - start_time)
+cat("time of copula fitting: ", end_time - start_time, "\n")
 ###!END RUN ON SERVER!###
 
 
 #explore copula
-load("results/MIMIC/copula_mimic_allvar_53kpatients_filtered_logtransformed.Rdata") #cop_mimic
+load("results/copula_mimic.Rdata") #cop_mimic
 load("data/clean/data_copula_mimic_clean.Rdata") #cop_data_MIMIC
 
-cat(paste(cop_mimic$vine_copula$names, collapse = ","))
-
+#### - Simulation - ####
 set.seed(83520583)
 large_sim <- simulate(cop_mimic, 5000)
 
-plot(cop_mimic$marginals$Albumin$dist$grid_points, cop_mimic$marginals$Albumin$dist$values)
-
-cop_mimic$marginals$Albumin$dist
-
-
-#test without the data
-try_cov <- cop_data_MIMIC$Albumin[!is.na(cop_data_MIMIC$Albumin)]
-try_kernel <- kde1d(try_cov)
-
-try_kernel$x <- NULL
-
-rkde1d(10, try_kernel)
-
-try_cop <- large_cop$vine_copula$pair_copulas[[1]][[1]]
-
-large_cop
-
-append(list(1, 5, 3), list(4), after = 2)
-
-pdf("results/figures/all_densities_clean_log.pdf", width = 60, height = 60)
+cat("Visualize all densities \n")
+pdf("results/figures/manuscript/FS2_full_copula_density_MIMIC.pdf", width = 70, height = 70)
 plot_comparison_distribution_sim_obs_generic(sim_data = large_sim, obs_data = cop_data_MIMIC, pick_color = c("#3ABAC1", "#969696"),
                                              plot_type = "density", variables = names(large_sim))
 dev.off()
 
-##
-#visualize 6 examples
+##### - Visualization - #####
+# visualize 6 examples
+cat("Visualize set of 6 densities\n")
 all_MIMIC <- large_sim %>% mutate(type = "copula") %>% 
   bind_rows(cop_data_MIMIC %>% mutate(type = "observed")) %>% 
   rename(Age = anchor_age, Weight = weight)
@@ -123,141 +110,19 @@ for (i in 1:nrow(sets_of_interest)) {
           ggside.panel.border = element_rect(colour = "white"), ggside.panel.scale = .2)
 }
 
-pdf(file = "results/MIMIC/selected_densities_patch.pdf", width = 0.85*9, height = 0.85*6)
+pdf(file = "results/figures/manuscript/F5_six_densities_MIMIC.pdf", width = 0.85*9, height = 0.85*6)
 (MIMIC_plot_list[[1]] + MIMIC_plot_list[[2]] + MIMIC_plot_list[[3]]) / (MIMIC_plot_list[[4]] + MIMIC_plot_list[[5]] + MIMIC_plot_list[[6]])
 dev.off()
 
 
+# calculate performance
+cop_sim <- get_statistics(large_sim)
+obs <- get_statistics(cop_data_MIMIC)
 
+performance_data <- cop_sim %>%
+  filter(statistic == "covariance" ) %>% 
+  mutate(key = paste(statistic, covariate, sep = "_")) %>% 
+  left_join(obs %>% dplyr::rename(observed = value)) %>% 
+  mutate(rel_value = (value - observed)/observed)
 
-###################
-cors <- cor(cop_data_MIMIC, use = "pairwise.complete.obs")
-cors_df <- data.frame(row=rownames(cors)[row(cors)[upper.tri(cors)]], 
-           col=colnames(cors)[col(cors)[upper.tri(cors)]], 
-           corr=cors[upper.tri(cors)])
-vars_corr <- c("Albumin", "C Reactive Protein (CRP)", "HDL", "INR", "Prothrombin time", "Hemoglobin", "Hematocrit (serum)", "ALT", "AST")
-
-
-pdf("results/MIMIC/plot_contour_32vars_v2.pdf", width = 20, height = 20)
-#contour(cop_mimic)
-#plot(cop_mimic, tree = 1:2, var_names = "use")
-plot_comparison_distribution_sim_obs_generic(sim_data = mimic_simulated, obs_data = cop_data_MIMIC, plot_type = "density", 
-                                             variables = vars_corr)
-dev.off()
-
-nr_pairwise_obs <- psych::pairwiseCount(cop_data_MIMIC)
-
-
-
-stats_copula <- get_statistics(large_sim)
-stats_obs <- get_statistics(cop_data_MIMIC)
-
-
-stats_both <- stats_copula %>% left_join(stats_obs %>% rename(observed = value)) %>% 
-  mutate(covariate = gsub("anchor_age", "age", covariate, fixed = TRUE)) %>% 
-  mutate(rel_error = (value - observed)/observed,
-         ratio_diff = value/observed,
-         abs_diff = value - observed) %>% 
-  mutate(cov1 = gsub("\\_.*", "", covariate),
-         cov2 = gsub(".*\\_", "", covariate))
-stats_both[, c("covA", "covB")] <- t(apply(as.data.frame(stats_both[, c("cov1", "cov2")]), 1, sort))
-
-vars_off <- c("Brain Natiuretic Peptide (BNP)", "Total Protein", "Absolute Count - Basos", "HDL", "C Reactive Protein (CRP)", "Potassium (serum)", "Hematocrit (serum)")
-
-
-pdf("results/MIMIC/plot_contour_32vars_off.pdf", width = 15, height = 15)
-#contour(cop_mimic)
-#plot(cop_mimic, tree = 1:2, var_names = "use")
-plot_comparison_distribution_sim_obs_generic(sim_data = mimic_simulated, obs_data = cop_data_MIMIC, plot_type = "density", 
-                                             variables = vars_off)
-dev.off()
-
-
-stats_both %>% filter(statistic == "covariance") %>% 
-  summarize(1 - median(ratio_diff, na.rm =  T), median(rel_error, na.rm =  T), 
-            RMSE = sqrt(mean(rel_error^2)))
-
-stats_both %>% filter(statistic == "covariance") %>% 
-  ggplot(aes(y = rel_error)) +
-  #geom_point() +
-  geom_boxplot(outlier.shape = NA)  +
-  scale_y_continuous(limits = quantile(stats_both$rel_error, c(0.1, 0.9), na.rm = TRUE)) +
-  geom_hline(yintercept = c(-0.2, 0.2), linetype = 2, color = "grey65") +
-  geom_hline(yintercept = 0, linetype = 2, color = "black") +
-  theme_bw()
-
-stats_both %>% filter(statistic == "covariance") %>% 
-  ggplot(aes(y = ratio_diff)) +
-  geom_boxplot(outlier.shape = NA)  +
-  scale_y_continuous(limits = quantile(stats_both$ratio_diff, c(0.1, 0.9), na.rm = TRUE)) +
-  geom_hline(yintercept = c(1-0.2, 1+0.2), linetype = 2, color = "grey65") +
-  geom_hline(yintercept = 1, linetype = 2, color = "black") +
-  theme_bw()
-
-
-stats_both %>% filter(statistic == "covariance") %>% 
-  ggplot(aes(y = rel_error, x = covariate)) +
-  geom_point() +
-  scale_y_continuous(limits = quantile(stats_both$rel_error, c(0.05, 0.95), na.rm = TRUE)) +
-  scale_x_discrete(guide = guide_axis(angle = 90)) +
-  geom_hline(yintercept = c(-0.2, 0.2), linetype = 2, color = "grey65") +
-  geom_hline(yintercept = 0, linetype = 2, color = "black") +
-  theme_bw()
-
-
-dens_plot <- cop_data_MIMIC %>% 
-  filter(INR < 5) %>% 
-  ggplot(mapping = aes(y = `Prothrombin time`, x = INR)) +
-  geom_density2d(alpha = 1, linetype = 2) +
-  geom_point(color = "red", alpha = 0.1) +
-  theme_bw() +
-  theme(legend.position = "none")
-
-
-
-plot_SJ_30d <- stats_both %>% 
-  filter(statistic == "covariance") %>% 
-  ggplot(aes(y = covA, x = covB)) +
-  
-  geom_tile(aes(fill = abs(rel_error))) +
-  geom_hline(yintercept = seq(0.5, 11.5, by = 1), color = "white") +
-  geom_vline(xintercept = seq(0.5, 11.5, by = 1), color = "white") +
-  geom_text(aes(label = round(rel_error, 2))) +
-  scale_fill_gradientn(colours = c("white", "#f46e32"), limits = c(0, 1)) +
-  scale_x_discrete(expand = expansion(mult = c(0, 0)), guide = guide_axis(angle = 90)) +
-  scale_y_discrete(expand = expansion(mult = c(0, 0))) +
-  theme_bw() +
-  theme(strip.background = element_rect(fill = "white"), panel.grid.minor.x = element_blank(),
-        panel.grid.major.x = element_blank(), panel.grid = element_blank())
-
-
-stats_both %>% 
-  filter(abs(rel_error) < 13) %>% 
-  filter(statistic == "covariance") %>% 
-  mutate(statistic = gsub("sd", "standard deviation", statistic, fixed = TRUE),
-         covariate = gsub("_", " - ", covariate, fixed = TRUE)) %>% 
-  mutate(covariate = gsub("CREA", "SCr", covariate, fixed = TRUE)) %>% 
-  ggplot(aes(y = rel_error, x = covariate)) +
-  geom_hline(yintercept = 0, color = "grey35") +  
-  geom_hline(yintercept = c(-0.2, 0.2), color = "grey35", linetype = 2) +  
-  geom_point(color = "#3ABAC1") +
-  labs(x = "Covariate combinations", y = "Relative error", color = "Method", shape = "Method") +
-  scale_x_discrete(guide = guide_axis(angle = 90)) +
-  theme_bw() +
-  theme(axis.text.x = element_text(size = 6),  strip.background = element_rect(fill = "white"),
-        strip.text = element_text( margin = margin( b = 1, t = 1), size = 12))
-
-
-stats_both %>% 
-  filter(abs(rel_error) < 13) %>% 
-  filter(statistic == "covariance") %>% 
-  mutate(statistic = gsub("sd", "standard deviation", statistic, fixed = TRUE),
-         covariate = gsub("_", " - ", covariate, fixed = TRUE)) %>% 
-  mutate(covariate = gsub("CREA", "SCr", covariate, fixed = TRUE)) %>% 
-  ggplot(aes(y = rel_error, x = observed)) +
-  geom_point(color = "#3ABAC1") +
-  #labs(x = "Covariate combinations", y = "Relative error", color = "Method", shape = "Method") +
-  scale_x_discrete(guide = guide_axis(angle = 90)) +
-  theme_bw() +
-  theme(strip.background = element_rect(fill = "white"),
-        strip.text = element_text( margin = margin( b = 1, t = 1), size = 12))
+median(performance_data$rel_value)

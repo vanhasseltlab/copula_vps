@@ -139,6 +139,85 @@ print(point_plot_intro_density + geom_point(data = concept_data, aes(color = col
                                             show.legend = FALSE, alpha = 0.8, shape = 16) + labs(x = "covariate A", y = "covariate B"))
 dev.off()
 
+#### PK Plots ####
+load("results/PK_24h.Rdata")
+#Typical PK
+plot_typical_PK <- df_pk_summary_24 %>% 
+  filter(type == "observed") %>% 
+  ggplot(aes(x = time/60)) +
+  geom_line(aes(y = median), color = "#8592BC", size = 1.5) +
+  scale_x_continuous(expand = expansion(mult = c(0, 0)), breaks = c(seq(0, 20, 5), 24)) + 
+  scale_y_continuous(expand = expansion(mult = c(0, 0.05))) +
+  labs(x = "Time (hour)", y = "Vancomycin concentration (mg/L)") +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank())
+
+pdf(file = "presentation/figures/line_typical_pk_Grimsey.pdf", width = 2.7, height = 2.7)
+print(plot_typical_PK)
+dev.off()
+
+plot_one_PK <- df_pk_summary_24 %>% 
+  filter(type == "observed") %>% 
+  ggplot(aes(x = time/60)) +
+  geom_ribbon(aes(ymin = p_25,ymax = p_75), fill = "grey80") +
+  geom_line(aes(y = median), color = "grey36", size = 1.5) +
+  scale_x_continuous(expand = expansion(mult = c(0, 0)), breaks = c(seq(0, 20, 5), 24), limits = c(0, 24)) + 
+  scale_y_continuous(expand = expansion(mult = c(0, 0.05))) +
+  labs(x = "Time", y = "Concentration") +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank(), axis.ticks = element_blank(), axis.text = element_blank())
+
+plot_data_PK <- plot_data %>% 
+  filter(time %in% c(60, 120, 600, 1400)) %>% 
+  filter(id %in% 1:10) %>% 
+  filter(Type == "copula") %>% 
+  ggplot(aes(y = conc, x = time/60)) +
+  stat_summary(fun = mean, geom = "line", color = "grey49", size = 1.5, linetype = 1) +
+  geom_point()  +
+  scale_x_continuous(expand = expansion(mult = c(0, 0)), breaks = c(seq(0, 20, 5), 24), limits = c(0, 24)) + 
+  scale_y_continuous(expand = expansion(mult = c(0, 0.05))) +
+  labs(x = "Time", y = "Concentration") +
+  labs(color = "Weight (kg)") +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank(), axis.ticks = element_blank(), axis.text = element_blank())
+
+
+col_pats <- read.csv("example/simulated_data_conceptual_figure.csv") %>% 
+  arrange(size) %>% 
+  mutate(id = 1:20)
+
+plot_model_PK_variation <- plot_data %>% 
+  filter(id %in% 1:20) %>% 
+  left_join(col_pats) %>% 
+  filter(Type == "copula") %>% 
+  ggplot(aes(y = conc, x = time/60, color = color_hexa2)) +
+  geom_ribbon(data = df_pk_summary_24 %>% filter(type == "copula"), 
+              aes(ymin = p_low, ymax = p_high, x = time/60), fill = "grey80", inherit.aes = F) +
+  geom_line(aes(group = id),size = 1.5)  +
+  scale_color_identity() +
+  scale_x_continuous(expand = expansion(mult = c(0, 0)), breaks = c(seq(0, 20, 5), 24), limits = c(0, 24)) + 
+  scale_y_continuous(expand = expansion(mult = c(0, 0.05))) +
+  labs(x = "Time", y = "Concentration") +
+  labs(color = "Weight (kg)") +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank(), axis.ticks = element_blank(), axis.text = element_blank())
+
+pdf(file = "presentation/figures/line_pks_conceptual.pdf", width = 3.57, height = 2)
+print(plot_one_PK + labs(x = NULL, y = NULL))
+print(plot_data_PK + labs(x = NULL, y = NULL))
+print(plot_model_PK_variation + labs(x = NULL, y = NULL))
+
+print(plot_one_PK)
+print(plot_data_PK)
+print(plot_model_PK_variation)
+dev.off()
+
+
+
+
+
+
+###############
 library(VennDiagram)
 list("marginal distribution", "multivariate normal distribution", "conditional distribution", "bootstrap", "copula")
 
