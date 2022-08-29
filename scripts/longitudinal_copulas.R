@@ -52,7 +52,7 @@ for (variable in variables_of_interest) {
 }
 
 #### Combine results copula and marginal ####
-df_long <- df_sim_marg %>% 
+df_long <- df_sim_marg$values %>% 
   mutate(type = "marginal\ndistribution") %>% 
   bind_rows(df_poly %>% select(which(!grepl("b\\d_", names(df_poly)))) %>% mutate(type = "observed")) %>% 
   bind_rows(df_sim$values %>% mutate(type = "copula")) %>% 
@@ -67,7 +67,7 @@ df_long_summary <- df_long %>%
 
 ####Visualization####
 # Plot data
-long_all <- df_sim_marg %>% 
+long_all <- df_sim_marg$values %>% 
   mutate(type = "marginal\ndistribution") %>% 
   bind_rows(df_poly %>% select(which(!grepl("b\\d_", names(df_poly)))) %>% mutate(type = "observed")) %>% 
   bind_rows(df_sim$values %>% mutate(type = "copula")) %>% 
@@ -85,10 +85,9 @@ plot_df_long_summary_lines <- df_long_summary %>%
   geom_line(aes(y = median, linetype = "Median")) +
   geom_line(aes(y = p_25, linetype = "Quartiles")) +
   geom_line(aes(y = p_75, linetype = "Quartiles")) +
-  geom_line(aes(y = p_high, linetype = "95% Quantiles")) +
-  geom_line(aes(y = p_low, linetype = "95% Quantiles")) +
-  scale_linetype_manual(values = c(1, 3, 2), breaks = c("Median", "Quartiles", "95% Quantiles"), name = NULL) + 
-  
+  geom_line(aes(y = p_high, linetype = "95% quantiles")) +
+  geom_line(aes(y = p_low, linetype = "95% quantiles")) +
+  scale_linetype_manual(values = c(1, 3, 2), breaks = c("Median", "Quartiles", "95% quantiles"), name = NULL) + 
   scale_color_manual(values = color_palette, limits = force) +
   scale_x_continuous(name = "Time (weeks)", breaks = c(0:9)*8) +
   scale_y_continuous(name = "Concentration (mg/L)", expand = expansion(mult = c(0.01, 0.05))) +
@@ -110,6 +109,6 @@ perf_dat <- get_statistics(df_sim$parameters) %>% mutate(simulation = "copula") 
          ratio_diff = value/observed,
          abs_diff = value - observed)
 
-perf_dat %>% #filter(statistic == "covariance") %>% 
+perf_dat %>%
   group_by(simulation, statistic) %>% 
   summarize(median = median(rel_error), mean = mean(rel_error))

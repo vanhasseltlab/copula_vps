@@ -78,12 +78,12 @@ plot_lines_weight_pres <- plot_data %>%
   labs(color = "Weight (kg)", tag = "(a)") +
   facet_grid(~ Type) +
   theme_bw() + 
-  geom_line(data = df_pk_summary_24, aes(y = median, linetype = "Median"), show.legend = F) +
-  geom_line(data = df_pk_summary_24, aes(y = p_25, linetype = "Quartiles"), show.legend = F) +
-  geom_line(data = df_pk_summary_24, aes(y = p_75, linetype = "Quartiles"), show.legend = F) +
-  geom_line(data = df_pk_summary_24, aes(y = p_high, linetype = "95% Quantiles"), show.legend = F) +
-  geom_line(data = df_pk_summary_24, aes(y = p_low, linetype = "95% Quantiles"), show.legend = F) +
-  scale_linetype_manual(values = c(1, 3, 2), breaks = c("Median", "Quartiles", "95% Quantiles"), name = NULL) + 
+  geom_line(data = df_pk_summary_24, aes(y = median, linetype = "Median"), show.legend = T) +
+  geom_line(data = df_pk_summary_24, aes(y = p_25, linetype = "Quartiles"), show.legend = T) +
+  geom_line(data = df_pk_summary_24, aes(y = p_75, linetype = "Quartiles"), show.legend = T) +
+  geom_line(data = df_pk_summary_24, aes(y = p_high, linetype = "95% quantiles"), show.legend = T) +
+  geom_line(data = df_pk_summary_24, aes(y = p_low, linetype = "95% quantiles"), show.legend = T) +
+  scale_linetype_manual(values = c(1, 3, 2), breaks = c("Median", "Quartiles", "95% quantiles"), name = NULL, labels = c("Median", "Quartiles", "95% quantiles")) + 
   scale_color_gradientn(colours = c("#f46e32", "#f46e32", "#8592BC", "#001158"), trans = "log10") +
   theme(strip.background = element_rect(fill = "white"), strip.text = element_text(size = 10))
 

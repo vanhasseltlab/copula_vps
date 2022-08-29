@@ -71,12 +71,12 @@ set.seed(seed_nr)
 sim_unif <- as.data.frame(rvinecop(n_sim*m, vine_distribution))
 names(sim_unif) <- names(data_unif)[1:3]
 sim_copula <- data.frame(CREA = marg_crea$pdf(sim_unif$CREA),
-                             age = marg_age$pdf(sim_unif$age),
-                             BW = marg_BW$pdf(sim_unif$BW),
-                             simulation_nr = rep(1:m, each = n_sim),
-                             simulation = "copula")
+                         age = marg_age$pdf(sim_unif$age),
+                         BW = marg_BW$pdf(sim_unif$BW),
+                         simulation_nr = rep(1:m, each = n_sim),
+                         simulation = "copula")
 
-copula_results <- get_statistics_multiple_sims(sim_copula, m, type = "copula")
+copula_results <- get_statistics_multiple_sims(sim_copula, m, type = "copula", columns = c("age", "BW", "CREA"))
 
 
 #### - Marginals: splines - ####
@@ -93,7 +93,7 @@ sim_marginal <- data.frame(CREA = marg_crea$rdist(n_sim*m),
                            simulation_nr = rep(1:m, each = n_sim),
                            simulation = "marginal distribution")
 # Get result statistics
-marginal_results <- get_statistics_multiple_sims(sim_marginal, m, type = "marginal distribution")
+marginal_results <- get_statistics_multiple_sims(sim_marginal, m, type = "marginal distribution", columns = c("age", "BW", "CREA"))
 
 #### - Multivariate Normal Distribution - ####
 # Fit distribution
@@ -110,7 +110,7 @@ sim_mvnorm <- data.frame(sim_mvnorm_raw,
                          simulation = "mvnormal distribution")
 
 # Get result statistics
-mvnorm_results <- get_statistics_multiple_sims(sim_mvnorm, m, type = "mvnormal distribution")
+mvnorm_results <- get_statistics_multiple_sims(sim_mvnorm, m, type = "mvnormal distribution", columns = c("age", "BW", "CREA"))
 
 
 
@@ -121,7 +121,7 @@ sim_cd <- simCovMICE(m = m, data_total, catCovs = NULL)
 names(sim_cd)[names(sim_cd) == "NSIM"] <- "simulation_nr"
 sim_cd$simulation <- "conditional distribution"
 # Get result statistics
-cd_results <- get_statistics_multiple_sims(sim_cd, m, type = "conditional distribution")
+cd_results <- get_statistics_multiple_sims(sim_cd, m, type = "conditional distribution", columns = c("age", "BW", "CREA"))
 
 #### - Bootstrap - ####
 # Draw sample
@@ -132,7 +132,7 @@ sim_bootstrap <- data.frame(sim_bootstrap_raw,
                             simulation = "bootstrap")
 
 # Get result statistics
-bootstrap_results <- get_statistics_multiple_sims(sim_bootstrap, m, type = "bootstrap")
+bootstrap_results <- get_statistics_multiple_sims(sim_bootstrap, m, type = "bootstrap", columns = c("age", "BW", "CREA"))
 
 ##### - Plot Results - #####
 all_statistics <- copula_results %>% 
@@ -160,7 +160,7 @@ obs_results <- read.csv(file = "results/comparison/obs_results.csv")
 
 # simulation performance Figure 1a
 plot_dat_3d <- all_statistics %>% 
-  filter(statistic %in% c("mean", "sd", "covariance")) %>% 
+  filter(statistic %in% c("mean", "sd", "correlation")) %>% 
   left_join(obs_results %>% rename(observed = value)) %>% 
   mutate(statistic = gsub("sd", "standard deviation", statistic, fixed = TRUE)) %>% 
   mutate(covariate = gsub("CREA", "SCr", covariate, fixed = TRUE)) %>% 
@@ -184,7 +184,7 @@ results_plot_relative <- plot_dat_3d %>%
 save(results_plot_relative, file = "results/figures/manuscript/F2A_performance_3_dimensions.Rdata")
 
 #values of simulations
-plot_dat_3d %>% filter(statistic == "covariance") %>% 
+plot_dat_3d %>% filter(statistic == "correlation") %>% 
   group_by(type, covariate) %>% 
   summarize(med_rel_error = median(rel_value), rmse = mean(rel_value^2)) 
 
@@ -207,7 +207,6 @@ plot_data_3d <- simulated_data %>%
   filter(!is.na(simulation))
 
 plot_chars <- list(geom_density2d(aes(color = simulation), bins = 20),
-                   #geom_point(aes(color = simulation), alpha = 0.5, stroke = 0, shape = 16),
                    geom_density2d(data = observed_data,  alpha = 1, linetype = 2, color = "grey35", bins = 20),
                    scale_y_continuous(expand = expansion(mult = c(0, 0.02)), limits = c(0, NA)),
                    scale_x_continuous(expand = expansion(mult = c(0, 0.02)), limits = c(0, NA)),

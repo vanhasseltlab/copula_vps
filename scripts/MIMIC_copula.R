@@ -51,7 +51,6 @@ cop_mimic <- estimate_vinecopula_from_data(dat = cop_data_MIMIC,
                                            keep_data = FALSE, family_set = "parametric", cores = 40)
 save(cop_mimic, file = "results/copula_mimic.Rdata")
 end_time <- Sys.time()
-#print(end_time - start_time)
 cat("time of copula fitting: ", end_time - start_time, "\n")
 ###!END RUN ON SERVER!###
 
@@ -120,7 +119,7 @@ cop_sim <- get_statistics(large_sim)
 obs <- get_statistics(cop_data_MIMIC)
 
 performance_data <- cop_sim %>%
-  filter(statistic == "covariance" ) %>% 
+  filter(statistic == "correlation" ) %>% 
   mutate(key = paste(statistic, covariate, sep = "_")) %>% 
   left_join(obs %>% dplyr::rename(observed = value)) %>% 
   mutate(rel_value = (value - observed)/observed)

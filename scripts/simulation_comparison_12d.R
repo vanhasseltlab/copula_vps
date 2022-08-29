@@ -26,8 +26,14 @@ seed_nr <- 89126460
 #### - Copulas: spline marginal + parametric copula - ####
 set.seed(seed_nr)
 large_cop <- estimate_vinecopula_from_data(data_total, family_set = "parametric")
-sim_cop <- simulate(large_cop, n = n_sim*m) %>% 
+sim_cop <- simulate(large_cop, n = n_sim*m) %>%
   mutate(simulation_nr = rep(1:m, each = n_sim))
+
+# set.seed(seed_nr)
+# large_cop <- virtual_patient_copula(data_total, categorical_covariates = "CREF", copula_controls = list(family_set = "parametric"))
+# sim_cop <- simulate(large_cop, n = n_sim*m) %>% 
+#   mutate(simulation_nr = rep(1:m, each = n_sim))
+
 
 #### - Marginals: splines - ####
 set.seed(seed_nr)
@@ -73,7 +79,7 @@ plot_dat <- get_statistics_multiple_sims(sim_cop, m = m) %>% mutate(simulation =
 plot_dat[, c("covA", "covB")] <- t(apply(as.data.frame(plot_dat[, c("cov1", "cov2")]), 1, sort))
 
 plot_differences <- plot_dat %>% 
-  filter(statistic == "covariance") %>% 
+  filter(statistic == "correlation") %>% 
   mutate(statistic = gsub("sd", "standard deviation", statistic, fixed = TRUE),
          covariate = gsub("_", " - ", covariate, fixed = TRUE)) %>% 
   mutate(covariate = gsub("CREA", "SCr", covariate, fixed = TRUE)) %>% 
@@ -102,7 +108,7 @@ pdf(file = "results/figures/manuscript/F2_performance.pdf", width = 8, height = 
 dev.off()
 
 
-plot_dat %>% filter(statistic == "covariance") %>% 
+plot_dat %>% filter(statistic == "correlation") %>% 
   group_by(simulation) %>% 
   summarize(med_rel_error = median(rel_value), rmse = mean(rel_value^2)) %>% 
   ungroup()

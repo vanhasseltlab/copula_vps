@@ -34,7 +34,7 @@ get_statistics_multiple_sims <- function(data_set, m, columns = NULL, type = NUL
   data_set <- data_set[, colSums(is.na(data_set)) != nrow(data_set)]
   
   if (is.null(columns)) {
-    columns <- setdiff(colnames(data_set), "simulation_nr")
+    columns <- setdiff(colnames(data_set), c("simulation_nr", "simulation"))
   }
   n_statistics <- length(columns)*5  + 2*choose(length(columns), 2)
   full_results <- as.data.frame(matrix(nrow = m*n_statistics, ncol = 5))
