@@ -2,7 +2,8 @@
 
 plot_comparison_distribution_sim_obs_generic <- function(sim_data, obs_data, variables = NULL, 
                                                          sim_nr = 1, title = NULL, plot_type = "points", 
-                                                         pick_color = c("#F46E32", "#5063B9"), full_plot = TRUE) {
+                                                         pick_color = c("#F46E32", "#5063B9"), full_plot = TRUE,
+                                                         caption = NULL, grob = FALSE) {
   #Combine truth and simulation results
   total_data <- obs_data %>% mutate(type = "observed") %>%
     bind_rows(sim_data %>% mutate(type = "simulated"))
@@ -87,5 +88,10 @@ plot_comparison_distribution_sim_obs_generic <- function(sim_data, obs_data, var
     list_plots <- c(density_plots, univariate_plots, point_plots)
   }
   
-  gridExtra::grid.arrange(grobs = list_plots, layout_matrix = layout_mat, top = title)
+  if (grob) {
+    return(gridExtra::arrangeGrob(grobs = list_plots, layout_matrix = layout_mat, 
+                                  top = title, bottom = grid::textGrob(caption, gp = grid::gpar(fontsize = 70), x = 0, hjust = 0)))
+  }
+  
+  gridExtra::grid.arrange(grobs = list_plots, layout_matrix = layout_mat, top = title, bottom = caption)
 }

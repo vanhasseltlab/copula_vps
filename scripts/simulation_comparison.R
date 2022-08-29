@@ -227,11 +227,16 @@ age_scr <-plot_data_3d %>%
 bw_scr <- plot_data_3d %>% 
   ggplot(mapping = aes(y = SCr, x = `Body weight`)) +
   plot_chars +
-  theme(strip.text.x = element_blank())
+  labs(caption = paste0("\nFigure S1: Densities of the three covariate simulations. ",
+                        "Grey dashed lines show the observed joint density for each ",
+                        "pair of covariates. The solid lines \nrepresent the joint ",
+                        "density of a simulated population for each of the five ", 
+                        "simulation methods: bootstrap (blue), conditional distributions ", 
+                        "(pink), \ncopula (turquoise), marginal distribution (yellow) ", 
+                        "and multivariate normal distribution (green).")) +
+  theme(strip.text.x = element_blank(), plot.caption = element_text(size = 12, hjust = 0))
 
 
-pdf("results/figures/manuscript/FS1_comparison_3_dimensions_densities.pdf", width = 12, height = 8)
+pdf("results/figures/manuscript/FS1_comparison_3_dimensions_densities.pdf", width = 12, height = 8.2)
 age_bw/age_scr/bw_scr
 dev.off()
-
-

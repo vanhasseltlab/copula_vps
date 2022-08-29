@@ -64,10 +64,12 @@ set.seed(83520583)
 large_sim <- simulate(cop_mimic, 5000)
 
 cat("Visualize all densities \n")
-pdf("results/figures/manuscript/FS2_full_copula_density_MIMIC.pdf", width = 70, height = 70)
-plot_comparison_distribution_sim_obs_generic(sim_data = large_sim, obs_data = cop_data_MIMIC, pick_color = c("#3ABAC1", "#969696"),
-                                             plot_type = "density", variables = names(large_sim))
-dev.off()
+plot_distributions_mimic <- plot_comparison_distribution_sim_obs_generic(sim_data = large_sim, obs_data = cop_data_MIMIC, pick_color = c("#3ABAC1", "#969696"),
+                                             plot_type = "density", variables = names(large_sim), grob = TRUE, 
+                                             caption = "\n  Figure S2: densities of all covariates in MIMIC which were modeled using a copula. The density of the simulations from the copula (blue solid line) and the \n  observed density (grey dashed line) show overlap for many covariate combinations.")
+
+ggsave(file = "results/figures/manuscript/FS2_full_copula_density_MIMIC.pdf", plot_distributions_mimic, width = 12, height = 12, units = "in", scale = 70/12, limitsize = FALSE)
+
 
 ##### - Visualization - #####
 # visualize 6 examples
