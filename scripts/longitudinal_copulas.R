@@ -2,7 +2,6 @@
 ##### - Libraries - #####
 library(tidyverse)
 library(rvinecopulib)
-library(EnvStats)
 library(kde1d)
 library(lme4)
 select <- dplyr::select
@@ -12,7 +11,7 @@ source("scripts/functions/functions.R")
 source("scripts/functions/estimate_vinecopula_from_data.R")
 color_palette <- create_colors(c("observed", "copula", "marginal\ndistribution", "conditional\ndistribution"), 
                                selected = c("grey", "turquoise", "dark yellow", "pink"))
-cat("it is working!")
+
 #### Data ####
 #data_reduced from data_preparation_pregnancy.R
 data_reduced <- read.csv("data/clean/pregnancy_reduced.csv", row.names = NULL)

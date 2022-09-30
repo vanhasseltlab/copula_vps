@@ -1,7 +1,7 @@
-#Make function for vinecopula (spline-based)
+#Wrapper function around rvinecopulib (spline-based)
 library(kde1d)
 library(rvinecopulib)
-#common generic functions (methods) print(), plot(), summary()
+#object for estimation and methods contour(), plot() and simulate()
 
 estimate_vinecopula_from_data <- function(dat, variables_of_interest = NULL, 
                                           polynomial = FALSE, ID_name = NULL, 
@@ -40,15 +40,14 @@ estimate_vinecopula_from_data <- function(dat, variables_of_interest = NULL,
       formula_v <- as.formula(paste(variable, "~ poly(", time_name, ", 2, raw = TRUE) +", 
                                     "(1 + poly(", time_name,",2, raw = TRUE)|", ID_name,")"))
       re_lm <- lmer(data = dat, formula_v, REML = TRUE)
-      individual_coefs <- coef(re_lm)$ID
-      
+      #extract individual coefficients
       dat_out[grep(paste0("_", variable), names(dat_out))] <-  coef(re_lm)[[ID_name]]
     }
   } else {
     dat_out <- dat[, variables_of_interest]
     time_range <- NULL
   }
-  print("Starting marginal estimation")
+  
   #estimate the marginal splines for each variable and create uniform data set
   marginals <- list()
   dat_unif <- dat_out
@@ -76,11 +75,10 @@ estimate_vinecopula_from_data <- function(dat, variables_of_interest = NULL,
   }
   
   
-  print("End marginal estimation")
-  print("Start copula estimation")
+  #estimate copula
   vine_coefs <- vinecop(dat_unif, ...)
-  print("End copula estimation")
   
+  #create output object
   vine_output <- list(vine_copula = vine_coefs, marginals = marginals, 
                       polynomial = polynomial, 
                       names = c(ID_name = ID_name, time_name = time_name), 
@@ -116,8 +114,6 @@ simulate.estVineCopula <- function(vine_output, n, value_only = TRUE) {
   } else {
     dat_sim <- as.data.frame(rvinecop(n, vine_output$vine_copula))
   }
-  
-  
   
   for (variable in names(dat_sim)) {
     ind_na <- is.na(dat_sim[, variable])

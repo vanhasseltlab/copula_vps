@@ -1,14 +1,12 @@
 #Comparison of different simulation methods in 3 dimensions
 ##### - Libraries - #####
-library(fitdistrplus)
 library(tidyverse)
 library(rvinecopulib)
-library(actuar)
-library(EnvStats)
 library(mvtnorm)
 library(kde1d)
 library(patchwork)
 select <- dplyr::select
+mvnorm.mle <- Rfast::mvnorm.mle
 
 ##### - Data - #####
 # Load data
@@ -97,7 +95,7 @@ marginal_results <- get_statistics_multiple_sims(sim_marginal, m, type = "margin
 
 #### - Multivariate Normal Distribution - ####
 # Fit distribution
-mvnorm_param <- Rfast::mvnorm.mle(as.matrix(data_total))
+mvnorm_param <- mvnorm.mle(as.matrix(data_total))
 mvnorm_fit <- list(pdf = function(u) qmvnorm(u, mean = mvnorm_param$mu, sigma = mvnorm_param$sigma),
                    pit = function(x) pmvnorm(x, mean = mvnorm_param$mu, sigma = mvnorm_param$sigma),
                    rdist = function(n) rmvnorm(n, mean = mvnorm_param$mu, sigma = mvnorm_param$sigma))
@@ -111,8 +109,6 @@ sim_mvnorm <- data.frame(sim_mvnorm_raw,
 
 # Get result statistics
 mvnorm_results <- get_statistics_multiple_sims(sim_mvnorm, m, type = "mvnormal distribution", columns = c("age", "BW", "CREA"))
-
-
 
 #### - Conditional Distribution - ####
 # Draw sample
@@ -149,7 +145,6 @@ all_sim <- sim_copula %>%
   bind_rows(sim_cd) %>% 
   bind_rows(sim_bootstrap) %>% 
   bind_rows(data_total %>% mutate(simulation = "observed")) 
-
 
 write.csv(all_sim, file = paste0("results/comparison/simulated_values.csv"), row.names = F)
 
