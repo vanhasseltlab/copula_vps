@@ -1,3 +1,4 @@
+#function for PK model (Grimsley) based on RxODE
 
 run_grimsley <- function(n, wgt, scr, other_covariates = NULL, verbose = F) {
   

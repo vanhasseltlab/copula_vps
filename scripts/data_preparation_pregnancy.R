@@ -7,7 +7,7 @@ library(tidyverse)
 
 #### Data ####
 #read in pregnancy data
-data_pregnancy_raw <- read.csv("data/Jig - pregnancy file August 2012 minus coag info.csv", 
+data_pregnancy_raw <- read.csv("data/Jig - pregnancy file August 2012 minus coag info.csv",
                                row.names = NULL, na.strings = c("")) %>% 
   mutate(Neutrophils = as.numeric(str_replace(Neutrophils, ":", ".")))
 

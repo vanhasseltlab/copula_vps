@@ -5,6 +5,7 @@ library(mvtnorm)
 library(patchwork)
 library(kde1d)
 library(rvinecopulib)
+mvnorm.mle <- Rfast::mvnorm.mle
 
 ##### - Functions - #####
 source("scripts/functions/estimate_vinecopula_from_data.R")
@@ -29,12 +30,6 @@ large_cop <- estimate_vinecopula_from_data(data_total, family_set = "parametric"
 sim_cop <- simulate(large_cop, n = n_sim*m) %>%
   mutate(simulation_nr = rep(1:m, each = n_sim))
 
-# set.seed(seed_nr)
-# large_cop <- virtual_patient_copula(data_total, categorical_covariates = "CREF", copula_controls = list(family_set = "parametric"))
-# sim_cop <- simulate(large_cop, n = n_sim*m) %>% 
-#   mutate(simulation_nr = rep(1:m, each = n_sim))
-
-
 #### - Marginals: splines - ####
 set.seed(seed_nr)
 large_marg <- estimate_vinecopula_from_data(data_total, family_set = "indep")
@@ -43,7 +38,7 @@ sim_marg <- simulate(large_marg, n = n_sim*m) %>%
 
 #### - Multivariate Normal Distribution - ####
 set.seed(seed_nr)
-mvnorm_param <- Rfast::mvnorm.mle(as.matrix(data_total))
+mvnorm_param <- mvnorm.mle(as.matrix(data_total))
 mvnorm_fit <- list(pdf = function(u) qmvnorm(u, mean = mvnorm_param$mu, sigma = mvnorm_param$sigma),
                    pit = function(x) pmvnorm(x, mean = mvnorm_param$mu, sigma = mvnorm_param$sigma),
                    rdist = function(n) rmvnorm(n, mean = mvnorm_param$mu, sigma = mvnorm_param$sigma))

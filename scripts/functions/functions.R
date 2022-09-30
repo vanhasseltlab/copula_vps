@@ -1,5 +1,4 @@
-
-
+#helper functions for covariate simulation and performance evaluation
 #calculate statistics for comparison
 get_statistics <- function(data_set, columns = NULL) {
   if(is.null(columns)) {
@@ -66,24 +65,6 @@ estimate_spline_marginal <- function(covariate, xmin = NaN) {
   return(marg)
 }
 
-#estimate parametric distribution using kde1d package
-estimate_parametric_marginal <- function(covariate, distribution, param = NULL) {
-  if (is.null(param)) {
-    param <- fitdist(covariate, distribution)
-  }
-  marg <- list(pdf = function(u) {
-    do.call(eval(paste0("q", distribution)), c(list(p = u), param$estimate))},
-    pit = function(x) {
-      do.call(eval(paste0("p", distribution)), c(list(q = x), param$estimate))}, 
-    rdist = function(n) {
-      do.call(eval(paste0("r", distribution)), c(list(n = n), param$estimate))},
-    density = function(x) {
-      do.call(eval(paste0("d", distribution)), c(list(x = x), param$estimate))},
-    dist = param)
-  
-  return(marg)
-}
-
 #transform a variable to a uniform distribution using it's marginal distribution
 tranform_to_uniform <- function(covariate, marg_dist) {
   if (any(is.na(covariate))) {
@@ -95,14 +76,6 @@ tranform_to_uniform <- function(covariate, marg_dist) {
     unif_vector <- marg_dist$pit(covariate)
   }
   return(unif_vector)
-}
-
-
-#check a marginal plot fit (base R)
-check_fit_plot <- function(x, marg_density) {
-  x_dens <- seq(min(x, na.rm = T), max(x, na.rm = TRUE), by = 1)
-  hist(x, probability = TRUE, breaks = 30)
-  lines(x_dens, marg_density(x_dens), col = "red", lwd = 2)
 }
 
 
