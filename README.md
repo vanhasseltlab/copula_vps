@@ -18,7 +18,7 @@ The folder scripts contains the following files:
 
 Above scripts depend on certain functions written in separate files.
 
--   **functions.R**, contais a set of helpers functions used throughout the project: `create_colors`, `check_fit_plot`, `tranform_to_uniform`, `estimate_parametric_marginal`, `estimate_spline_marginal`, `get_statistics_multiple_sims` and `get_statistics`
+-   **functions.R**, contais a set of helpers functions used throughout the project: `create_colors`, `tranform_to_uniform`, `estimate_spline_marginal`, `get_statistics_multiple_sims` and `get_statistics`.
 -   **estimate_vinecopula.R**, contains a wrapper function for the `rvinecopula` package for estimation of copulas. Can be used on untrasformed data and uses kernel density estimation for the marginal distributions. Creates an object which can be used to simulate new covariate sets.
 -   **Smania_Jonsson_MICE_simulation.R**, retrieved from the article Smania & Jonsson (2021). Contains function for conditional distribution simulation.
 -   **run_Grimsley.R**, contains the `run_grimsley` function which implements the vancomycin PK model from Grimsley & Thomson (1999). Used for PK_model_simulation.R.
