@@ -26,4 +26,4 @@ Above scripts depend on certain functions written in separate files.
 
 ### Data
 
-The MIMIC data can be retrieved from <https://physionet.org/content/mimiciv/1.0/>. The other data is restricted.
+The MIMIC data can be retrieved from <https://physionet.org/content/mimiciv/1.0/>. The other data are restricted.
