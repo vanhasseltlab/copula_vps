@@ -111,3 +111,9 @@ perf_dat <- get_statistics(df_sim$parameters) %>% mutate(simulation = "copula") 
 perf_dat %>%
   group_by(simulation, statistic) %>% 
   summarize(median = median(rel_error), mean = mean(rel_error))
+
+#### Save copula object ####
+copula_long$original_data <- NULL
+copula_long$uniform_data <- NULL
+copula_long$time_range <- c(0.3, 41)
+save(copula_long, file = "copulas/longitudinal_copula.Rdata")

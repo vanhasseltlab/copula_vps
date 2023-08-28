@@ -107,3 +107,6 @@ plot_dat %>% filter(statistic == "correlation") %>%
   group_by(simulation) %>% 
   summarize(med_rel_error = median(rel_value), rmse = mean(rel_value^2)) %>% 
   ungroup()
+
+#### Save copula object ####
+save(large_cop, file = "copulas/pediatric_copula.Rdata")

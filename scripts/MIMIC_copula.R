@@ -49,14 +49,14 @@ start_time <- Sys.time()
 cop_mimic <- estimate_vinecopula_from_data(dat = cop_data_MIMIC, 
                                            variables_of_interest = names(cop_data_MIMIC), 
                                            keep_data = FALSE, family_set = "parametric", cores = 40)
-save(cop_mimic, file = "results/copula_mimic.Rdata")
+save(cop_mimic, file = "copulas/mimic_copula.Rdata")
 end_time <- Sys.time()
 cat("time of copula fitting: ", end_time - start_time, "\n")
 ###!END RUN ON SERVER!###
 
 
 #explore copula
-load("results/copula_mimic.Rdata") #cop_mimic
+load("copulas/mimic_copula.Rdata") #cop_mimic
 load("data/clean/data_copula_mimic_clean.Rdata") #cop_data_MIMIC
 
 #### - Simulation - ####
