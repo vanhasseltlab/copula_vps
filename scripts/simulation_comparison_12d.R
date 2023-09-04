@@ -70,7 +70,9 @@ plot_dat <- get_statistics_multiple_sims(sim_cop, m = m) %>% mutate(simulation =
   left_join(get_statistics(data_total) %>% rename(observed = value)) %>% 
   mutate(rel_value = (value - observed)/observed) %>% 
   mutate(cov1 = gsub("\\_.*", "", covariate),
-         cov2 = gsub("\\w+.\\_", "", covariate))
+         cov2 = gsub("\\w+.\\_", "", covariate)) %>% 
+  group_by(statistic, covariate, simulation) %>% 
+  mutate(RMSE = sqrt(mean((value - observed)^2))) %>% ungroup()
 plot_dat[, c("covA", "covB")] <- t(apply(as.data.frame(plot_dat[, c("cov1", "cov2")]), 1, sort))
 
 plot_differences <- plot_dat %>% 
@@ -110,3 +112,16 @@ plot_dat %>% filter(statistic == "correlation") %>%
 
 #### Save copula object ####
 save(large_cop, file = "copulas/pediatric_copula.Rdata")
+
+#### Create Suppl table 4 ####
+plot_dat %>% 
+  filter(statistic %in% c("correlation", "mean")) %>% 
+  mutate(statistic = gsub("sd", "standard deviation", statistic, fixed = TRUE),
+         covariate = gsub("_", " - ", covariate, fixed = TRUE)) %>% 
+  mutate(covariate = gsub("CREA", "SCr", covariate, fixed = TRUE)) %>% 
+  group_by(statistic, covariate, simulation, RMSE) %>% 
+  summarize(med_rel_error = median(rel_value)) %>% 
+  ungroup() %>% 
+  pivot_longer(c(med_rel_error, RMSE), names_to = "error metric", values_to = "error") %>% 
+  pivot_wider(names_from = simulation, values_from = error) %>% 
+  arrange(`error metric`, covariate) %>%write_csv(file = "results/12d_performance.csv")
