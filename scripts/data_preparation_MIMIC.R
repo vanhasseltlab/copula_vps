@@ -1,5 +1,4 @@
 # preparation MIMIC data
-setwd("/home/laura/copulas/copulas_pharmacology/")
 ##### - Libraries - #####
 library(tidyverse)
 library(data.table)
